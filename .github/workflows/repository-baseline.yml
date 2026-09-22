@@ -13,37 +13,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Reject committed environment files
         shell: bash
         run: |
           set -euo pipefail
           bad="$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '(^|/)\.env\.example$' || true)"
-          if [[ -n "$bad" ]]; then
-            echo "Environment files must not be committed:"
-            echo "$bad"
-            exit 1
-          fi
-
-      - name: Inspect temporary source transfer
+          test -z "$bad" || { echo "Environment files must not be committed:"; echo "$bad"; exit 1; }
+      - name: Validate transfer fragments
         shell: bash
         run: |
           set -euo pipefail
-          if ! compgen -G '.laloba-transfer/*.b64' > /dev/null; then
-            exit 0
-          fi
-          while IFS= read -r part; do
+          for part in .laloba-transfer/*.b64; do
+            [ -e "$part" ] || continue
             tr -d '\r\n' < "$part" | base64 --decode > /dev/null
-          done < <(find .laloba-transfer -maxdepth 1 -type f -name '*.b64' -print | sort)
+          done
 
+  application:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect application lockfile
+        id: app
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then echo 'present=true' >> "$GITHUB_OUTPUT"; else echo 'present=false' >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-node@v4
+        if: steps.app.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: npm
       - name: Install dependencies
-        if: hashFiles('package-lock.json') != ''
+        if: steps.app.outputs.present == 'true'
         run: npm ci
-
       - name: Typecheck
-        if: hashFiles('package-lock.json') != ''
+        if: steps.app.outputs.present == 'true'
         run: npm run typecheck
-
       - name: Test
-        if: hashFiles('package-lock.json') != ''
+        if: steps.app.outputs.present == 'true'
         run: npm test
