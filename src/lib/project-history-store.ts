@@ -3,6 +3,7 @@ import { appendGeneration, emptyProjectHistory, restoreGeneration } from "./proj
 
 const STORAGE_PREFIX = "laloba:project-history:";
 const MAX_SERIALIZED_BYTES = 2_500_000;
+const LEGACY_MIGRATION_MARKER = "legacy-migrated";
 
 function storageKey(projectId: string) {
   if (!/^[A-Za-z0-9._:-]{1,128}$/.test(projectId)) throw new Error("Invalid project id");
@@ -41,4 +42,18 @@ export async function restoreProjectGeneration(projectId: string, generationId: 
   const history = await restoreGeneration(loadProjectHistory(projectId), generationId);
   saveProjectHistory(projectId, history);
   return history;
+}
+
+export function hasGenerationHistory(projectId: string): boolean {
+  return loadProjectHistory(projectId).generations.length > 0;
+}
+
+export function markLegacyHistoryMigrated(projectId: string) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(storageKey(projectId) + ":" + LEGACY_MIGRATION_MARKER, "1");
+}
+
+export function legacyHistoryWasMigrated(projectId: string): boolean {
+  if (typeof localStorage === "undefined") return false;
+  return localStorage.getItem(storageKey(projectId) + ":" + LEGACY_MIGRATION_MARKER) === "1";
 }
