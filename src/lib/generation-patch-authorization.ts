@@ -2,6 +2,7 @@ import { applyGenerationPatch, generationPatchSha256, type GenerationPatch, type
 import { createProjectSnapshot, projectTreeSha256 } from "./project-files";
 import { assertGenerationId } from "./generation-id";
 import { assertProjectId } from "./project-id";
+import { validateProjectArtifact } from "./project-artifact";
 
 export const PATCH_AUTHORIZATION_TTL_MS=10*60*1000;
 
@@ -21,7 +22,9 @@ export async function preparePatchAuthorization(
 ):Promise<PendingPatchAuthorization>{
  assertGenerationId(generationId);
  assertProjectId(projectId);
- await applyGenerationPatch(currentFiles,patch);
+ const nextFiles=await applyGenerationPatch(currentFiles,patch);
+ const artifact=validateProjectArtifact(nextFiles);
+ if(!artifact.ok)throw new Error(`Patch would produce an invalid project: ${artifact.reason}`);
  return{schemaVersion:"2",generationId,projectId,prompt,patch,patchSha256:await generationPatchSha256(patch),baseTreeSha256:await projectTreeSha256(currentFiles),preparedAt:now.toISOString()};
 }
 
@@ -36,6 +39,8 @@ export async function authorizePatch(
  if(await generationPatchSha256(pending.patch)!==pending.patchSha256)throw new Error("Authorization payload changed after preparation");
  if(await projectTreeSha256(currentFiles)!==pending.baseTreeSha256)throw new Error("Project tree changed after generation; regenerate before applying");
  const files=await applyGenerationPatch(currentFiles,pending.patch);
- const snapshot=await createProjectSnapshot(pending.generationId,files);
- return{files,snapshot};
+ const artifact=validateProjectArtifact(files);
+ if(!artifact.ok)throw new Error(`Patch would produce an invalid project: ${artifact.reason}`);
+ const snapshot=await createProjectSnapshot(pending.generationId,artifact.files);
+ return{files:artifact.files,snapshot};
 }
