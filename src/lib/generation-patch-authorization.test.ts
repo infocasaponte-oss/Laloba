@@ -48,3 +48,10 @@ test("rejects malformed generation ids before preparing patch approval",async()=
  const patch={schemaVersion:"2" as const,summary:"fix",operations:[{op:"update" as const,path:"src/app.ts",baseSha256:await sha256("old"),content:"new"}]};
  await assert.rejects(()=>preparePatchAuthorization("bad","p1","fix",patch,base),/Invalid generation id/);
 });
+
+
+test("rejects invalid project ids before preparing patch approval",async()=>{
+ const base=[{path:"src/app.ts",content:"old"}];
+ const patch={schemaVersion:"2" as const,summary:"fix",operations:[{op:"update" as const,path:"src/app.ts",baseSha256:await sha256("old"),content:"new"}]};
+ await assert.rejects(()=>preparePatchAuthorization("generation_patch_6","../project","fix",patch,base),/Invalid project id/);
+});
