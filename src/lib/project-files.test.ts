@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createProjectSnapshot, verifyProjectSnapshot } from "./project-files.ts";
+import { createProjectSnapshot, projectTreeSha256, verifyProjectSnapshot } from "./project-files.ts";
 
 test("creates and verifies an immutable project snapshot", async () => {
   const snapshot = await createProjectSnapshot("generation_1234", [{ path: "src/app.tsx", content: "export default 1" }], "2026-01-01T00:00:00.000Z");
@@ -27,4 +27,10 @@ test("rejects duplicate snapshot paths even when file hashes are valid",async()=
  const snapshot=await createProjectSnapshot("generation_3456",[{path:"src/a.ts",content:"a"}]);
  snapshot.files.push({...snapshot.files[0]});
  assert.equal(await verifyProjectSnapshot(snapshot),false);
+});
+
+test("canonical tree digest binds paths as well as content",async()=>{
+ const original=await projectTreeSha256([{path:"src/a.ts",content:"same"}]);
+ const renamed=await projectTreeSha256([{path:"src/b.ts",content:"same"}]);
+ assert.notEqual(original,renamed);
 });
