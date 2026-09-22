@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { validateProjectArtifact } from "./project-artifact";
+import { sha256 } from "./project-files";
 
 const MAX_FILES=80;
 const fileSchema=z.object({
@@ -24,4 +25,17 @@ export function parseGenerationResultV2(text:string){
  const artifact=validateProjectArtifact(parsed.data.files);
  if(!artifact.ok)return{ok:false as const,reason:artifact.reason};
  return{ok:true as const,result:{...parsed.data,files:artifact.files}};
+}
+
+
+export async function generationResultV2Sha256(result:GenerationResultV2){
+ const parsed=generationResultV2Schema.safeParse(result);
+ if(!parsed.success)throw new Error("Invalid generation result v2");
+ const artifact=validateProjectArtifact(parsed.data.files);
+ if(!artifact.ok)throw new Error(`Invalid generation artifact: ${artifact.reason}`);
+ return sha256(JSON.stringify({
+  schemaVersion:"2",
+  summary:parsed.data.summary,
+  files:artifact.files.map(({path,content})=>({path,content})),
+ }));
 }
