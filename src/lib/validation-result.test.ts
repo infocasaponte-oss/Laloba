@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { validationApprovalDecision,validationResultSchema } from "./validation-result.ts";
 
+const stages=["contract","artifact","dependencies","typecheck","test","build","security"] as const;
 const base={
  schemaVersion:"1" as const,
  jobId:"runner_12345678",
@@ -9,7 +10,7 @@ const base={
  treeSha256:"a".repeat(64),
  startedAt:"2026-01-01T00:00:00.000Z",
  completedAt:"2026-01-01T00:00:01.000Z",
- stages:["contract","artifact","dependencies","typecheck","test","build","security"].map((stage)=>({
+ stages:stages.map((stage)=>({
   stage,
   status:"passed" as const,
   durationMs:10,
