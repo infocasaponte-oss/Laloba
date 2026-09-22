@@ -2,6 +2,7 @@ import { generationResultSha256, type GenerationResult } from "./generation-resu
 import { createGenerationManifest } from "./generation-manifest";
 import { createProjectSnapshot, sha256, type ProjectSnapshot } from "./project-files";
 import { assertGenerationId } from "./generation-id";
+import { assertProjectId } from "./project-id";
 
 export const GENERATION_AUTHORIZATION_TTL_MS=10*60*1000;
 
@@ -20,12 +21,15 @@ export async function prepareGenerationAuthorization(
  generationId:string,projectId:string,prompt:string,result:GenerationResult,currentHtml:string,now=new Date()
 ):Promise<PendingGenerationAuthorization>{
  assertGenerationId(generationId);
+ assertProjectId(projectId);
  return{schemaVersion:"1",generationId,projectId,prompt,result,resultSha256:await generationResultSha256(result),previousHtmlSha256:await sha256(currentHtml),preparedAt:now.toISOString()};
 }
 
 export async function authorizeGeneration(
  pending:PendingGenerationAuthorization,projectId:string,currentHtml:string,now=new Date()
 ):Promise<{snapshot:ProjectSnapshot;manifest:Awaited<ReturnType<typeof createGenerationManifest>>}>{
+ assertProjectId(projectId);
+ assertProjectId(pending.projectId);
  if(pending.projectId!==projectId)throw new Error("Authorization belongs to another project");
  const preparedAt=Date.parse(pending.preparedAt);
  if(!Number.isFinite(preparedAt)||now.getTime()-preparedAt>GENERATION_AUTHORIZATION_TTL_MS||now.getTime()<preparedAt)throw new Error("Authorization expired; regenerate before applying");
