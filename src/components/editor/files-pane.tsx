@@ -4,7 +4,9 @@ import type { Project } from "@/lib/types";
 import { toast } from "sonner";
 
 export function FilesPane({ project }: { project: Project }) {
-  const extras = project.files.filter((f) => f.path !== "index.html");
+  const files=project.tree.files;
+  const entry=files.find((file)=>file.path==="index.html");
+  const extras=files.filter((file)=>file.path!=="index.html");
   return <div className="h-full overflow-y-auto p-6">
     <div className="mb-4 flex items-center justify-between">
       <div><h2 className="font-display text-lg font-semibold">Archivos</h2><p className="text-sm text-muted">Informes, exportaciones y adjuntos del proyecto.</p></div>
