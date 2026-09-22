@@ -25,3 +25,20 @@ test("rejects a patch authorization used on another project",async()=>{
  const pending=await preparePatchAuthorization("generation_patch_3","p1","fix",patch,base);
  await assert.rejects(()=>authorizePatch(pending,"p2",base),/another project/);
 });
+
+test("rejects tampering with a prepared patch",async()=>{
+ const base=[{path:"src/app.ts",content:"old"}];
+ const patch={schemaVersion:"2" as const,summary:"fix",operations:[{op:"update" as const,path:"src/app.ts",baseSha256:await sha256("old"),content:"new"}]};
+ const now=new Date("2026-01-01T00:00:00.000Z");
+ const pending=await preparePatchAuthorization("generation_patch_4","p1","fix",patch,base,now);
+ pending.patch.operations[0]={...pending.patch.operations[0],content:"tampered"} as typeof pending.patch.operations[0];
+ await assert.rejects(()=>authorizePatch(pending,"p1",base,now),/payload changed/);
+});
+
+test("rejects expired or future-dated authorizations",async()=>{
+ const base=[{path:"src/app.ts",content:"old"}];
+ const patch={schemaVersion:"2" as const,summary:"fix",operations:[{op:"update" as const,path:"src/app.ts",baseSha256:await sha256("old"),content:"new"}]};
+ const pending=await preparePatchAuthorization("generation_patch_5","p1","fix",patch,base,new Date("2026-01-01T00:00:00.000Z"));
+ await assert.rejects(()=>authorizePatch(pending,"p1",base,new Date("2026-01-01T00:11:00.000Z")),/expired/);
+ await assert.rejects(()=>authorizePatch(pending,"p1",base,new Date("2025-12-31T23:59:59.000Z")),/expired/);
+});
