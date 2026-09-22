@@ -42,7 +42,7 @@ function EditorPage() {
 
 function Editor({ projectId, autostart }: { projectId: string; autostart: boolean; onMissing: () => void }) {
   const project = useLaloba((s) => s.projects.find((p) => p.id === projectId))!;
-  const appendMessage=useLaloba((s)=>s.appendMessage), setHtml=useLaloba((s)=>s.setHtml), setProjectFiles=useLaloba((s)=>s.setProjectFiles), spendCredits=useLaloba((s)=>s.spendCredits);
+  const appendMessage=useLaloba((s)=>s.appendMessage), setProjectFiles=useLaloba((s)=>s.setProjectFiles), spendCredits=useLaloba((s)=>s.spendCredits);
   const knowledge=useLaloba((s)=>s.knowledge), addDraft=useLaloba((s)=>s.addDraft), applyDraft=useLaloba((s)=>s.applyDraft);
   const addComment=useLaloba((s)=>s.addComment), rename=useLaloba((s)=>s.renameProject);
   const [tab,setTab]=useState<Tab>("preview"), [chatOpen,setChatOpen]=useState(true), [sideOpen,setSideOpen]=useState(false);
