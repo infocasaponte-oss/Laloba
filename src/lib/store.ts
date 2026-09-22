@@ -4,7 +4,8 @@ import { persist } from "zustand/middleware";
 import { CONNECTORS, INBOX_SEED, NEWS_SEED, TEMPLATES } from "@/lib/catalog";
 import { demoHtml } from "@/lib/html-apps";
 import { createGenerationId } from "@/lib/generation-id";
-import { entrypointHtml, projectTreeFromGeneration, replaceProjectTreeGeneration } from "@/lib/project-tree";
+import { entrypointHtml, replaceProjectTreeGeneration } from "@/lib/project-tree";
+import { canonicalizeProjectTree, projectTreeFromLegacyProject, projectTreeProjection } from "@/lib/project-state";
 import type { ProjectSourceFile } from "@/lib/generation-patch";
 import type {
   ApiKey,
@@ -19,29 +20,21 @@ import { slugify, uid } from "@/lib/utils";
 
 const now = Date.now();
 
-function legacyGenerationId(projectId:string){
-  const safe=projectId.replace(/[^A-Za-z0-9_-]/g,"_").slice(0,48) || "project";
-  return `generation_legacy_${safe}`;
-}
-
 function makeProject(partial: Partial<Project> & Pick<Project, "name" | "html">): Project {
-  const id = partial.id ?? uid("p");
-  const createdAt = partial.createdAt ?? now;
-  const sourceFiles=partial.tree?.files ?? partial.files ?? [{path:"index.html",content:partial.html}];
-  const generationId=partial.tree?.generationId ?? partial.currentGenerationId ?? legacyGenerationId(id);
+  const id=partial.id ?? uid("p");
+  const createdAt=partial.createdAt ?? now;
   const tree=partial.tree
-    ? replaceProjectTreeGeneration(partial.tree,generationId,sourceFiles)
-    : projectTreeFromGeneration(generationId,{schemaVersion:"2",summary:"Legacy project migration",files:sourceFiles});
-  const html=entrypointHtml(tree);
-  if(!html)throw new Error("Project tree is missing index.html");
+    ? canonicalizeProjectTree(partial.tree)
+    : projectTreeFromLegacyProject(id,partial.html,partial.files);
+  const projection=projectTreeProjection(tree);
   return {
     id,
     name: partial.name,
     description: partial.description ?? "",
-    html,
-    files: tree.files.map((file)=>({...file})),
-    tree,
-    currentGenerationId: tree.generationId,
+    html: projection.html,
+    files: projection.files,
+    tree: projection.tree,
+    currentGenerationId: projection.currentGenerationId,
     messages: partial.messages ?? [],
     versions: partial.versions ?? [
       { id: uid("v"), createdAt, label: "Versión inicial", html: partial.html },
