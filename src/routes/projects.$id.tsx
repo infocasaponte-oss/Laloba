@@ -16,6 +16,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { extractHtml, stripHtmlBlock } from "@/lib/html-apps";
 import { parseGenerationResult } from "@/lib/generation-result";
+import { createGenerationManifest } from "@/lib/generation-manifest";
 import { streamChat } from "@/lib/stream-chat";
 import { useHasHydrated, useLaloba } from "@/lib/store";
 import type { Mode } from "@/lib/types";
@@ -60,7 +61,13 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
         : structured && !structured.ok && !legacyHtml
           ? `No apliqué el resultado: ${structured.reason}`
           : stripHtmlBlock(text) || (html ? "Listo. Revisé la vista previa." : text);
-      if(html&&mode==="build") setHtml(projectId,html,prompt.slice(0,40));
+      if(html&&mode==="build") {
+        if (structured?.ok) {
+          const manifest = await createGenerationManifest(structured.result);
+          console.info("laloba:generation-manifest", manifest);
+        }
+        setHtml(projectId,html,prompt.slice(0,40));
+      }
       const credits=mode==="plan"?0.4:1.1; spendCredits(credits);
       appendMessage(projectId,{id:uid("m"),role:"assistant",content:visible,mode,createdAt:Date.now(),credits,durationMs:Date.now()-t0,filesChanged:html?["index.html"]:[]});
     } catch(err) { appendMessage(projectId,{id:uid("m"),role:"assistant",content:err instanceof Error?err.message:"No se pudo completar",mode,createdAt:Date.now()}); }
