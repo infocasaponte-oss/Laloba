@@ -230,14 +230,16 @@ h1{font-family:Syne,sans-serif;letter-spacing:-.03em}</style></head>
       },
       deleteProject: (id) => set({ projects: get().projects.filter((p) => p.id !== id) }),
       remixProject: (id) => {
-        const src = get().projects.find((p) => p.id === id);
-        if (!src) throw new Error("Proyecto no encontrado");
-        const copy = makeProject({
-          name: `Remix de ${src.name}`,
-          description: src.description,
-          html: src.html,
-          hue: src.hue,
-          files: src.files.map((f) => ({ ...f })),
+        const src=get().projects.find((p)=>p.id===id);
+        if(!src)throw new Error("Proyecto no encontrado");
+        const sourceHtml=entrypointHtml(src.tree);
+        if(!sourceHtml)throw new Error("Project tree is missing index.html");
+        const copy=makeProject({
+          name:`Remix de ${src.name}`,
+          description:src.description,
+          html:sourceHtml,
+          hue:src.hue,
+          files:src.tree.files.map((file)=>({...file})),
         });
         set({ projects: [copy, ...get().projects] });
         return copy;
@@ -296,7 +298,9 @@ h1{font-family:Syne,sans-serif;letter-spacing:-.03em}</style></head>
       addDraft: (projectId, name) => {
         const p = get().projects.find((x) => x.id === projectId);
         if (!p) throw new Error("Proyecto no encontrado");
-        const draft: Draft = { id: uid("d"), name, html: p.html, createdAt: Date.now() };
+        const html=entrypointHtml(p.tree);
+        if(!html)throw new Error("Project tree is missing index.html");
+        const draft: Draft = { id: uid("d"), name, html, createdAt: Date.now() };
         get().updateProject(projectId, { drafts: [...p.drafts, draft] });
         return draft;
       },
