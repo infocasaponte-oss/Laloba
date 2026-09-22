@@ -41,7 +41,7 @@ export async function authorizeGeneration(
   }
   const [snapshot,manifest]=await Promise.all([
     createProjectSnapshot(pending.generationId,pending.result.files),
-    createGenerationManifest(pending.result),
+    createGenerationManifest(pending.generationId,pending.result),
   ]);
   return {snapshot,manifest};
 }
