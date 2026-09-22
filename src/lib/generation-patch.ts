@@ -37,7 +37,13 @@ export function parseGenerationPatch(text:string){
 }
 
 export async function applyGenerationPatch(files:ProjectSourceFile[],patch:GenerationPatch){
-  const next=new Map(files.map((file)=>[file.path,file.content]));
+  const next=new Map<string,string>();
+  for(const file of files){
+    const validated=validateGeneratedPath(file.path);
+    if(!validated.ok)throw new Error(validated.reason);
+    if(next.has(validated.path))throw new Error(`Duplicate project path: ${validated.path}`);
+    next.set(validated.path,file.content);
+  }
   for(const operation of patch.operations){
     const path=validateGeneratedPath(operation.path);
     if(!path.ok)throw new Error(path.reason);
