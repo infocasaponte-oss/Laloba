@@ -28,3 +28,33 @@ test("rejects create over an existing file",async()=>{
  const patch={schemaVersion:"2" as const,summary:"x",operations:[{op:"create" as const,path:"src/app.ts",content:"new"}]};
  await assert.rejects(()=>applyGenerationPatch([{path:"src/app.ts",content:"old"}],patch),/already exists/);
 });
+
+test("rejects delete of a missing file",async()=>{
+ const patch={schemaVersion:"2" as const,summary:"x",operations:[{op:"delete" as const,path:"src/missing.ts",baseSha256:await sha256("old")}]};
+ await assert.rejects(()=>applyGenerationPatch([],patch),/no longer exists/);
+});
+
+test("does not mutate the input when a later operation conflicts",async()=>{
+ const input=[{path:"src/a.ts",content:"a"},{path:"src/b.ts",content:"b"}];
+ const before=structuredClone(input);
+ const patch={schemaVersion:"2" as const,summary:"x",operations:[
+  {op:"update" as const,path:"src/a.ts",baseSha256:await sha256("a"),content:"changed"},
+  {op:"update" as const,path:"src/b.ts",baseSha256:await sha256("stale"),content:"never"},
+ ]};
+ await assert.rejects(()=>applyGenerationPatch(input,patch),/changed after generation/);
+ assert.deepEqual(input,before);
+});
+
+test("rejects malformed hashes and oversized aggregate patch content",()=>{
+ const malformed=parseGenerationPatch(JSON.stringify({schemaVersion:"2",summary:"x",operations:[{op:"delete",path:"src/a.ts",baseSha256:"nope"}]}));
+ assert.equal(malformed.ok,false);
+ const content="x".repeat(400_001);
+ const operations=Array.from({length:5},(_,i)=>({op:"create",path:`src/file-${i}.txt`,content}));
+ assert.equal(parseGenerationPatch(JSON.stringify({schemaVersion:"2",summary:"x",operations})).ok,false);
+});
+
+test("rejects unsafe or duplicate paths already present in the base tree",async()=>{
+ const patch={schemaVersion:"2" as const,summary:"x",operations:[{op:"create" as const,path:"src/new.ts",content:"new"}]};
+ await assert.rejects(()=>applyGenerationPatch([{path:"../secret",content:"x"}],patch));
+ await assert.rejects(()=>applyGenerationPatch([{path:"src/a.ts",content:"1"},{path:"src/a.ts",content:"2"}],patch),/Duplicate project path/);
+});
