@@ -1,16 +1,19 @@
 import { z } from "zod";
 import type { ProjectGeneration,ProjectHistory } from "./project-history";
 import { appendGeneration,emptyProjectHistory,restoreGeneration } from "./project-history";
+import { projectFileSchema } from "./project-files";
+import { isValidGenerationId } from "./generation-id";
+import { assertProjectId } from "./project-id";
 
 const STORAGE_PREFIX="laloba:project-history:";
 const MAX_SERIALIZED_BYTES=2_500_000;
 const LEGACY_MIGRATION_MARKER="legacy-migrated";
-const fileSchema=z.object({path:z.string(),content:z.string(),sha256:z.string()}).strict();
-const snapshotSchema=z.object({schemaVersion:z.literal("1"),generationId:z.string(),createdAt:z.string(),files:z.array(fileSchema),treeSha256:z.string().optional()}).strict();
-const generationSchema=z.object({id:z.string(),summary:z.string(),snapshot:snapshotSchema}).strict();
-const historySchema=z.object({schemaVersion:z.literal("1"),currentGenerationId:z.string().nullable(),generations:z.array(generationSchema).max(50)}).strict();
+const generationIdSchema=z.string().refine(isValidGenerationId);
+const snapshotSchema=z.object({schemaVersion:z.literal("1"),generationId:generationIdSchema,createdAt:z.string().min(1).max(64),files:z.array(projectFileSchema).max(80),treeSha256:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict();
+const generationSchema=z.object({id:generationIdSchema,summary:z.string().trim().min(1).max(800),snapshot:snapshotSchema}).strict();
+const historySchema=z.object({schemaVersion:z.literal("1"),currentGenerationId:generationIdSchema.nullable(),generations:z.array(generationSchema).max(50)}).strict();
 
-function storageKey(projectId:string){if(!/^[A-Za-z0-9._:-]{1,128}$/.test(projectId))throw new Error("Invalid project id");return STORAGE_PREFIX+projectId}
+function storageKey(projectId:string){return STORAGE_PREFIX+assertProjectId(projectId)}
 function storage(){return typeof localStorage==="undefined"?null:localStorage}
 
 export function loadProjectHistory(projectId:string):ProjectHistory{
