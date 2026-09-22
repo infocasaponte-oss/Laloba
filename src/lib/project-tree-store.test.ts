@@ -11,28 +11,28 @@ class MemoryStorage implements ProjectTreeStorage{
 
 test("persists and deterministically reloads a multi-file project tree",async()=>{
  const storage=new MemoryStorage();
- await await saveProjectTree("p1",{schemaVersion:"2",generationId:"g1",files:[{path:"src/z.ts",content:"z"},{path:"index.html",content:"html"}]},storage);
+ await saveProjectTree("p1",{schemaVersion:"2",generationId:"generation_cache_1",files:[{path:"src/z.ts",content:"z"},{path:"index.html",content:"html"}]},storage);
  assert.deepEqual((await loadProjectTree("p1",storage))?.files.map(f=>f.path),["index.html","src/z.ts"]);
 });
 
 test("rejects unsafe or duplicate cached paths",async()=>{
  const storage=new MemoryStorage();
- storage.setItem(projectTreeStorageKey("p1"),JSON.stringify({schemaVersion:"2",generationId:"g1",files:[{path:"../secret",content:"x"}]}));
+ storage.setItem(projectTreeStorageKey("p1"),JSON.stringify({schemaVersion:"2",generationId:"generation_cache_1",files:[{path:"../secret",content:"x"}]}));
  assert.equal(await loadProjectTree("p1",storage),null);
- storage.setItem(projectTreeStorageKey("p1"),JSON.stringify({schemaVersion:"2",generationId:"g1",files:[{path:"src/a.ts",content:"1"},{path:"src/a.ts",content:"2"}]}));
+ storage.setItem(projectTreeStorageKey("p1"),JSON.stringify({schemaVersion:"2",generationId:"generation_cache_1",files:[{path:"src/a.ts",content:"1"},{path:"src/a.ts",content:"2"}]}));
  assert.equal(await loadProjectTree("p1",storage),null);
 });
 
 test("clears a cached project tree",async()=>{
  const storage=new MemoryStorage();
- saveProjectTree("p1",{schemaVersion:"2",generationId:"g1",files:[{path:"index.html",content:"x"}]},storage);
+ await saveProjectTree("p1",{schemaVersion:"2",generationId:"generation_cache_1",files:[{path:"index.html",content:"x"}]},storage);
  clearProjectTree("p1",storage);
  assert.equal(await loadProjectTree("p1",storage),null);
 });
 
 test("rejects tampered authenticated cache entries",async()=>{
  const storage=new MemoryStorage();
- await saveProjectTree("p2",{schemaVersion:"2",generationId:"g2",files:[{path:"index.html",content:"safe"}]},storage);
+ await saveProjectTree("p2",{schemaVersion:"2",generationId:"generation_cache_2",files:[{path:"index.html",content:"safe"}]},storage);
  const key=projectTreeStorageKey("p2");
  const raw=JSON.parse(storage.getItem(key)!);
  raw.files[0].content="tampered";
@@ -42,4 +42,11 @@ test("rejects tampered authenticated cache entries",async()=>{
 
 test("rejects invalid project ids for cache keys",()=>{
  assert.throws(()=>projectTreeStorageKey("../other"),/Invalid project id/);
+});
+
+test("rejects invalid generation ids in cached trees",async()=>{
+ const storage=new MemoryStorage();
+ await assert.rejects(()=>saveProjectTree("p3",{schemaVersion:"2",generationId:"bad",files:[{path:"index.html",content:"x"}]},storage),/Invalid generation id/);
+ storage.setItem(projectTreeStorageKey("p3"),JSON.stringify({schemaVersion:"2",generationId:"bad",files:[{path:"index.html",content:"x"}],treeSha256:"a".repeat(64)}));
+ assert.equal(await loadProjectTree("p3",storage),null);
 });
