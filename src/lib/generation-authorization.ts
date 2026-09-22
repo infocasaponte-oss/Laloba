@@ -1,6 +1,7 @@
-import type { GenerationResult } from "./generation-result";
+import { generationResultSha256, type GenerationResult } from "./generation-result";
 import { createGenerationManifest } from "./generation-manifest";
 import { createProjectSnapshot, sha256, type ProjectSnapshot } from "./project-files";
+import { assertGenerationId } from "./generation-id";
 
 export const GENERATION_AUTHORIZATION_TTL_MS=10*60*1000;
 
@@ -15,14 +16,11 @@ export type PendingGenerationAuthorization={
  preparedAt:string;
 };
 
-async function resultSha256(result:GenerationResult){
- return sha256(JSON.stringify(result));
-}
-
 export async function prepareGenerationAuthorization(
  generationId:string,projectId:string,prompt:string,result:GenerationResult,currentHtml:string,now=new Date()
 ):Promise<PendingGenerationAuthorization>{
- return{schemaVersion:"1",generationId,projectId,prompt,result,resultSha256:await resultSha256(result),previousHtmlSha256:await sha256(currentHtml),preparedAt:now.toISOString()};
+ assertGenerationId(generationId);
+ return{schemaVersion:"1",generationId,projectId,prompt,result,resultSha256:await generationResultSha256(result),previousHtmlSha256:await sha256(currentHtml),preparedAt:now.toISOString()};
 }
 
 export async function authorizeGeneration(
@@ -31,7 +29,7 @@ export async function authorizeGeneration(
  if(pending.projectId!==projectId)throw new Error("Authorization belongs to another project");
  const preparedAt=Date.parse(pending.preparedAt);
  if(!Number.isFinite(preparedAt)||now.getTime()-preparedAt>GENERATION_AUTHORIZATION_TTL_MS||now.getTime()<preparedAt)throw new Error("Authorization expired; regenerate before applying");
- if(await resultSha256(pending.result)!==pending.resultSha256)throw new Error("Authorization payload changed after preparation");
+ if(await generationResultSha256(pending.result)!==pending.resultSha256)throw new Error("Authorization payload changed after preparation");
  if(await sha256(currentHtml)!==pending.previousHtmlSha256)throw new Error("Project changed after generation; regenerate before applying");
  const [snapshot,manifest]=await Promise.all([
   createProjectSnapshot(pending.generationId,pending.result.files),
