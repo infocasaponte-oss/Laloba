@@ -1,0 +1,1 @@
+export function createGenerationId(){if(typeof crypto!=="undefined"&&"randomUUID" in crypto)return `gen_${crypto.randomUUID().replaceAll("-","")}`;throw new Error("Secure random generation IDs are unavailable")}
