@@ -73,3 +73,25 @@ Once the canonical lockfile is present, CI must run these gates from a clean che
 The focused generator suite is intentionally separate: failures in generation contracts, path confinement, preview isolation, rate limiting, snapshot integrity, or generated HTML validation block changes even when unrelated application tests pass.
 
 GitHub-hosted runner availability is infrastructure, not an application assertion. A workflow that never receives a runner must not be reported as a passing or failing Laloba test run.
+
+
+## GitHub Actions failure classification
+
+Treat a workflow conclusion of `failure` as an application failure only after at least one job step actually starts.
+
+A run is classified as a **pre-runner / Actions infrastructure failure** when all of the following are true:
+
+- GitHub creates the expected jobs;
+- the jobs finish as `failure`;
+- the jobs expose zero steps;
+- job logs are unavailable / return a missing log blob;
+- no checkout, shell command, Node command, test, or build step ran.
+
+This pattern has been observed repeatedly on the repository, including run `35727008217` and later HEAD runs. Re-running the failed jobs can confirm whether the condition is transient, but a second zero-step attempt is still infrastructure/account scheduling evidence rather than evidence that Laloba's test suite failed.
+
+When a runner is successfully allocated, the application job must fail closed until both of these normalization prerequisites are present:
+
+1. the canonical runtime source passes `node scripts/check-runtime-source.mjs`;
+2. the authoritative `package-lock.json` is present.
+
+Only after those gates pass does CI execute `npm ci`, typecheck, generator security tests, the general test suite, and the development build.
