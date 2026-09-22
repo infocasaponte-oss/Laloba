@@ -19,7 +19,7 @@ import { parseGenerationResult } from "@/lib/generation-result";
 import { createGenerationManifest } from "@/lib/generation-manifest";
 import { createGenerationId } from "@/lib/generation-id";
 import { createProjectSnapshot } from "@/lib/project-files";
-import { recordProjectGeneration } from "@/lib/project-history-store";
+import { loadProjectHistory, recordProjectGeneration, restoreProjectGeneration } from "@/lib/project-history-store";
 import { streamChat } from "@/lib/stream-chat";
 import { useHasHydrated, useLaloba } from "@/lib/store";
 import type { Mode } from "@/lib/types";
@@ -49,6 +49,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   const [historyOpen,setHistoryOpen]=useState(false), [shareOpen,setShareOpen]=useState(false), [publishOpen,setPublishOpen]=useState(false);
   const [commentsOpen,setCommentsOpen]=useState(false), [selectMode,setSelectMode]=useState(false), [streaming,setStreaming]=useState<string|null>(null);
   const busy=streaming!==null, started=useRef(false);
+  const generationHistory = historyOpen ? loadProjectHistory(projectId) : null;
 
   async function run(prompt:string, mode:Mode) {
     if (busy) return;
@@ -71,6 +72,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
             createGenerationManifest(structured.result),
             createProjectSnapshot(generationId, structured.result.files),
           ]);
+          recordProjectGeneration(projectId, { id: generationId, summary: structured.result.summary, snapshot });
           console.info("laloba:generation", { generationId, manifest, snapshot });
         }
         setHtml(projectId,html,prompt.slice(0,40));
@@ -96,7 +98,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
     <div className="min-h-0 flex-1">{chatOpen?<Group orientation="horizontal"><Panel defaultSize="32%" minSize="260px"><ChatPanel project={project} streaming={streaming} busy={busy} onSend={run}/></Panel><Separator className="w-px bg-border"/><Panel>{tab==="preview"?<PreviewPane html={project.html} selectMode={selectMode}/>:tab==="files"?<FilesPane project={project}/>:tab==="code"?<CodePane html={project.html}/>:<MorePanel project={project}/>}</Panel></Group>:tab==="preview"?<PreviewPane html={project.html} selectMode={selectMode}/>:tab==="files"?<FilesPane project={project}/>:tab==="code"?<CodePane html={project.html}/>:<MorePanel project={project}/>}</div>
   </div>
   <Sheet open={sideOpen} onOpenChange={setSideOpen}><SheetContent side="left"><div className="space-y-3 p-4"><LogoMark className="size-7"/><Link to="/">Panel</Link><Link to="/templates">Plantillas</Link><Link to="/connectors">Conectores</Link><Link to="/settings">Ajustes</Link></div></SheetContent></Sheet>
-  <Dialog open={historyOpen} onOpenChange={setHistoryOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Historial</h2><div className="mt-3 space-y-2">{project.versions.map((v)=><button key={v.id} type="button" className="block w-full rounded-lg border border-border p-3 text-left" onClick={()=>{restoreVersion(project.id,v.id);setHistoryOpen(false)}}><div className="text-sm font-medium">{v.label}</div><div className="text-xs text-muted">{formatRelative(v.createdAt)}</div></button>)}</div></DialogContent></Dialog>
+  <Dialog open={historyOpen} onOpenChange={setHistoryOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Historial</h2><div className="mt-3 space-y-2">{generationHistory?.generations.slice().reverse().map((g)=><button key={g.id} type="button" className="block w-full rounded-lg border border-border p-3 text-left" onClick={async()=>{try{const history=await restoreProjectGeneration(projectId,g.id);const current=history.generations.find((x)=>x.id===history.currentGenerationId);const html=current?.snapshot.files.find((file)=>file.path==="index.html")?.content;if(!html)throw new Error("Snapshot sin index.html");setHtml(projectId,html,`Restaurar ${g.summary.slice(0,30)}`);setHistoryOpen(false);toast.success("Generación restaurada y verificada")}catch{toast.error("No se pudo verificar esta generación")}}}><div className="text-sm font-medium">{g.summary}</div><div className="text-xs text-muted">{g.id}</div></button>)}{project.versions.map((v)=><button key={v.id} type="button" className="block w-full rounded-lg border border-border p-3 text-left" onClick={()=>{restoreVersion(project.id,v.id);setHistoryOpen(false)}}><div className="text-sm font-medium">{v.label}</div><div className="text-xs text-muted">{formatRelative(v.createdAt)}</div></button>)}</div></DialogContent></Dialog>
   <Dialog open={shareOpen} onOpenChange={setShareOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Compartir</h2><Input readOnly value={typeof window!=="undefined"?window.location.href:""}/></DialogContent></Dialog>
   <Dialog open={publishOpen} onOpenChange={setPublishOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Publicar</h2><p className="text-sm text-muted">La publicación será una operación separada y autorizada. El preview no concede credenciales de despliegue.</p><Button onClick={()=>setPublishOpen(false)}>Entendido</Button></DialogContent></Dialog>
   <Dialog open={commentsOpen} onOpenChange={setCommentsOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Comentarios</h2><Textarea id="new-comment" placeholder="Añade un comentario"/><Button onClick={()=>{const el=document.getElementById("new-comment") as HTMLTextAreaElement|null;if(el?.value.trim()){addComment(project.id,el.value.trim());setCommentsOpen(false)}}}>Añadir</Button></DialogContent></Dialog>
