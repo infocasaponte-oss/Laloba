@@ -45,14 +45,6 @@ export const Route = createFileRoute("/api/chat")({
           return jsonError("Authentication unavailable", 503);
         }
 
-        const quota = consumeGenerationQuota(userId);
-        if (!quota.allowed) {
-          return Response.json(
-            { error: "Generation rate limit exceeded" },
-            { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(quota.retryAfterSeconds) } },
-          );
-        }
-
         const apiKey = process.env.XAI_API_KEY;
         if (!apiKey) return jsonError("AI is not available", 503);
 
@@ -75,6 +67,17 @@ export const Route = createFileRoute("/api/chat")({
         const parsed = requestSchema.safeParse(raw);
         if (!parsed.success) return jsonError("Invalid request", 400);
         const body = parsed.data;
+
+        // Charge quota only for a request that is authenticated, well-formed and
+        // actually eligible to reach the model provider.
+        const quota = consumeGenerationQuota(userId);
+        if (!quota.allowed) {
+          return Response.json(
+            { error: "Generation rate limit exceeded" },
+            { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(quota.retryAfterSeconds) } },
+          );
+        }
+
         const history = body.messages.slice(-12);
         const extra: { role: "system"; content: string }[] = [
           { role: "system", content: body.mode === "plan" ? SYSTEM_PLAN : SYSTEM_BUILD },
