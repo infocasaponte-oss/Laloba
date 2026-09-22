@@ -1,0 +1,16 @@
+import { Link,useNavigate } from "@tanstack/react-router";
+import { ExternalLink,FolderInput,MoreHorizontal,Pencil,Star,Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Dropdown,DropdownContent,DropdownItem,DropdownSep,DropdownTrigger } from "@/components/ui/dropdown";
+import { useLaloba } from "@/lib/store";
+import type { Project } from "@/lib/types";
+import { formatRelative } from "@/lib/utils";
+import { toast } from "sonner";
+
+export function ProjectCard({project}:{project:Project}) {
+ const navigate=useNavigate(),toggleStar=useLaloba((s)=>s.toggleStar),deleteProject=useLaloba((s)=>s.deleteProject),remix=useLaloba((s)=>s.remixProject),rename=useLaloba((s)=>s.renameProject),folders=useLaloba((s)=>s.folders),moveToFolder=useLaloba((s)=>s.moveToFolder);
+ return <article className="group relative overflow-hidden rounded-xl bg-surface shadow-[var(--shadow-border)] transition-[box-shadow] duration-150 hover:shadow-[var(--shadow-border-hover)]">
+  <Link to="/projects/$id" params={{id:project.id}} className="block"><div className="h-32" style={{background:`linear-gradient(160deg, hsl(${project.hue} 12% 18%), hsl(${(project.hue+40)%360} 8% 10%))`}}/><div className="p-3"><div className="flex items-start gap-2"><h3 className="min-w-0 flex-1 truncate font-medium">{project.name}</h3>{project.published&&<Badge tone="live">Publicado</Badge>}</div><p className="mt-1 truncate text-xs text-muted">{formatRelative(project.updatedAt)}</p></div></Link>
+  <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100"><button type="button" className="flex size-8 items-center justify-center rounded-full bg-bg/70 text-fg" aria-label="Destacar" onClick={()=>toggleStar(project.id)}><Star className={project.starred?"size-3.5 fill-primary text-primary":"size-3.5"}/></button><Dropdown><DropdownTrigger asChild><button type="button" className="flex size-8 items-center justify-center rounded-full bg-bg/70 text-fg" aria-label="Acciones"><MoreHorizontal className="size-3.5"/></button></DropdownTrigger><DropdownContent><DropdownItem onSelect={()=>void navigate({to:"/projects/$id",params:{id:project.id}})}>Abrir</DropdownItem><DropdownItem onSelect={()=>{const copy=remix(project.id);void navigate({to:"/projects/$id",params:{id:copy.id}})}}>Remix</DropdownItem><DropdownItem onSelect={()=>{const name=window.prompt("Nombre",project.name);if(name)rename(project.id,name)}}><Pencil className="size-4"/> Renombrar</DropdownItem>{folders.map((f)=><DropdownItem key={f.id} onSelect={()=>moveToFolder(project.id,f.id)}><FolderInput className="size-4"/> Mover a {f.name}</DropdownItem>)}<DropdownItem onSelect={()=>moveToFolder(project.id,null)}>Quitar de carpeta</DropdownItem><DropdownItem onSelect={()=>toast("Miniatura: usa el color del proyecto")}>Editar miniatura</DropdownItem>{project.published&&<DropdownItem onSelect={()=>toast("Sitio publicado en demo")}><ExternalLink className="size-4"/> Ver sitio</DropdownItem>}<DropdownSep/><DropdownItem destructive onSelect={()=>{if(window.confirm(`Eliminar ${project.name}?`))deleteProject(project.id)}}><Trash2 className="size-4"/> Eliminar</DropdownItem></DropdownContent></Dropdown></div>
+ </article>;
+}
