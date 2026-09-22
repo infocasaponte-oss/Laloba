@@ -20,6 +20,18 @@ export const generationPatchSchema=z.object({
 export type GenerationPatch=z.infer<typeof generationPatchSchema>;
 export type ProjectSourceFile={path:string;content:string};
 
+
+export async function generationPatchSha256(patch:GenerationPatch){
+ const parsed=generationPatchSchema.safeParse(patch);
+ if(!parsed.success)throw new Error("Invalid generation patch");
+ const operations=[...parsed.data.operations].sort((a,b)=>a.path.localeCompare(b.path)).map(operation=>{
+  if(operation.op==="create")return{op:"create" as const,path:operation.path,content:operation.content};
+  if(operation.op==="update")return{op:"update" as const,path:operation.path,baseSha256:operation.baseSha256,content:operation.content};
+  return{op:"delete" as const,path:operation.path,baseSha256:operation.baseSha256};
+ });
+ return sha256(JSON.stringify({schemaVersion:"2",summary:parsed.data.summary,operations}));
+}
+
 export function parseGenerationPatch(text:string){
   let raw:unknown;
   try{raw=JSON.parse(text.trim())}catch{return{ok:false as const,reason:"El generador no devolvió JSON válido."}}
