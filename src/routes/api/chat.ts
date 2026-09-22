@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { requireUserId, UnauthorizedError } from "@/lib/auth/verify.server";
+import { consumeGenerationQuota } from "@/lib/generation-rate-limit.server";
 
 const MAX_REQUEST_BYTES = 96_000;
 const UPSTREAM_TIMEOUT_MS = 75_000;
@@ -36,11 +37,20 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        let userId: string;
         try {
-          await requireUserId();
+          userId = await requireUserId();
         } catch (error) {
           if (error instanceof UnauthorizedError) return jsonError("Unauthorized", 401);
           return jsonError("Authentication unavailable", 503);
+        }
+
+        const quota = consumeGenerationQuota(userId);
+        if (!quota.allowed) {
+          return Response.json(
+            { error: "Generation rate limit exceeded" },
+            { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(quota.retryAfterSeconds) } },
+          );
         }
 
         const apiKey = process.env.XAI_API_KEY;
