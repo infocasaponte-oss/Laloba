@@ -30,10 +30,7 @@ export async function generationResultSha256(result:GenerationResult){
 export function parseGenerationResult(text: string):
   | { ok: true; result: GenerationResult }
   | { ok: false; reason: string } {
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i);
-  const candidate = fenced?.[1] ?? text;
-  let raw: unknown;
-  try { raw = JSON.parse(candidate.trim()); }
+  let raw: unknown;\n  try { raw = JSON.parse(text.trim()); }
   catch { return { ok: false, reason: "El generador no devolvió JSON válido." }; }
 
   const parsed = generationResultSchema.safeParse(raw);
