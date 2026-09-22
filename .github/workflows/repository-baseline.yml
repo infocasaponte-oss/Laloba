@@ -54,15 +54,8 @@ jobs:
       - name: Verify canonical runtime source
         run: node scripts/check-runtime-source.mjs
 
-      - name: Require canonical npm lockfile
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f package-lock.json || {
-            echo "package-lock.json is required before application validation can run."
-            echo "Import the authoritative lockfile together with the canonical runtime source."
-            exit 1
-          }
+      - name: Restore and verify canonical npm lockfile
+        run: node scripts/restore-canonical-lockfile.mjs
 
       - uses: actions/setup-node@v4
         with:
