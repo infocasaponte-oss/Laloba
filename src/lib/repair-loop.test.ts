@@ -4,6 +4,7 @@ import { MAX_REPAIR_ITERATIONS,repairLoopDecision,validationRepairEvidence } fro
 
 const tree="a".repeat(64);
 const state={schemaVersion:"1" as const,runId:"repair_12345678",iteration:0,startedAt:"2026-01-01T00:00:00.000Z",candidateTreeSha256:tree};
+const stages=["contract","artifact","dependencies","typecheck","test","build","security"] as const;
 const passed={
  schemaVersion:"1" as const,
  jobId:"runner_12345678",
@@ -11,7 +12,7 @@ const passed={
  treeSha256:tree,
  startedAt:"2026-01-01T00:00:00.000Z",
  completedAt:"2026-01-01T00:00:01.000Z",
- stages:["contract","artifact","dependencies","typecheck","test","build","security"].map((stage)=>({stage,status:"passed" as const,durationMs:10,diagnostics:[]})),
+ stages:stages.map((stage)=>({stage,status:"passed" as const,durationMs:10,diagnostics:[]})),
 };
 
 test("approves candidates only after validation passes",()=>{
