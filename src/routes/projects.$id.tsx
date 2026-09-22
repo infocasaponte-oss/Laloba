@@ -18,9 +18,7 @@ import { stripHtmlBlock } from "@/lib/html-apps";
 import { authorizeGeneration, prepareGenerationAuthorization, type PendingGenerationAuthorization } from "@/lib/generation-authorization";
 import { parseGenerationResult } from "@/lib/generation-result";
 import type { GenerationResult } from "@/lib/generation-result";
-import { createGenerationManifest } from "@/lib/generation-manifest";
 import { createGenerationId } from "@/lib/generation-id";
-import { createProjectSnapshot } from "@/lib/project-files";
 import { loadProjectHistory, recordProjectGeneration, restoreProjectGeneration } from "@/lib/project-history-store";
 import { streamChat } from "@/lib/stream-chat";
 import { useHasHydrated, useLaloba } from "@/lib/store";
@@ -46,7 +44,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   const project = useLaloba((s) => s.projects.find((p) => p.id === projectId))!;
   const appendMessage=useLaloba((s)=>s.appendMessage), setHtml=useLaloba((s)=>s.setHtml), spendCredits=useLaloba((s)=>s.spendCredits);
   const knowledge=useLaloba((s)=>s.knowledge), addDraft=useLaloba((s)=>s.addDraft), applyDraft=useLaloba((s)=>s.applyDraft);
-  const addComment=useLaloba((s)=>s.addComment), updateProject=useLaloba((s)=>s.updateProject), rename=useLaloba((s)=>s.renameProject);
+  const addComment=useLaloba((s)=>s.addComment), rename=useLaloba((s)=>s.renameProject);
   const [tab,setTab]=useState<Tab>("preview"), [chatOpen,setChatOpen]=useState(true), [sideOpen,setSideOpen]=useState(false);
   const [historyOpen,setHistoryOpen]=useState(false), [shareOpen,setShareOpen]=useState(false), [publishOpen,setPublishOpen]=useState(false);
   const [commentsOpen,setCommentsOpen]=useState(false), [selectMode,setSelectMode]=useState(false), [streaming,setStreaming]=useState<string|null>(null);
@@ -61,13 +59,12 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
     try {
       const text=await streamChat({mode,messages:[...project.messages,userMsg].map((m)=>({role:m.role,content:m.content})),currentHtml:mode==="build"?project.html:undefined,knowledge:project.knowledge||knowledge,onDelta:(c)=>setStreaming((s)=>(s??"")+c)});
       const structured = mode === "build" ? parseGenerationResult(text) : null;
-      const legacyHtml = mode === "build" && structured && !structured.ok ? extractHtml(text) : null;
-      const html = structured?.ok ? structured.result.files[0].content : legacyHtml;
+      const html = structured?.ok ? structured.result.files[0].content : null;
       const visible = structured?.ok
         ? structured.result.summary
-        : structured && !structured.ok && !legacyHtml
+        : structured && !structured.ok
           ? `No apliqué el resultado: ${structured.reason}`
-          : stripHtmlBlock(text) || (html ? "Listo. Revisé la vista previa." : text);
+          : stripHtmlBlock(text) || text;
       if(html&&mode==="build"&&structured?.ok) {
         if(project.html.trim()){
           setPendingGeneration(await prepareGenerationAuthorization(createGenerationId(),projectId,prompt,structured.result,project.html));
