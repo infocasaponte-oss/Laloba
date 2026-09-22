@@ -4,21 +4,38 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: repository-baseline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   repository-safety:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
+      - name: Runner diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "runner=${RUNNER_NAME:-unknown}"
+          echo "os=${RUNNER_OS:-unknown}"
+          echo "sha=${GITHUB_SHA}"
+          echo "ref=${GITHUB_REF}"
+
       - name: Reject committed environment files
         shell: bash
         run: |
           set -euo pipefail
           bad="$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '(^|/)\.env\.example$' || true)"
           test -z "$bad" || { echo "Environment files must not be committed:"; echo "$bad"; exit 1; }
+
       - name: Validate transfer fragments
         shell: bash
         run: |
@@ -30,32 +47,39 @@ jobs:
 
   application:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Detect application lockfile
-        id: app
+
+      - name: Verify canonical runtime source
+        run: node scripts/check-runtime-source.mjs
+
+      - name: Require canonical npm lockfile
         shell: bash
         run: |
-          if [ -f package-lock.json ]; then echo 'present=true' >> "$GITHUB_OUTPUT"; else echo 'present=false' >> "$GITHUB_OUTPUT"; fi
+          set -euo pipefail
+          test -f package-lock.json || {
+            echo "package-lock.json is required before application validation can run."
+            echo "Import the authoritative lockfile together with the canonical runtime source."
+            exit 1
+          }
+
       - uses: actions/setup-node@v4
-        if: steps.app.outputs.present == 'true'
         with:
           node-version: 22
           cache: npm
+
       - name: Install dependencies
-        if: steps.app.outputs.present == 'true'
         run: npm ci
+
       - name: Typecheck
-        if: steps.app.outputs.present == 'true'
         run: npm run typecheck
+
       - name: Generator security suite
-        if: steps.app.outputs.present == 'true'
         run: npm run test:generator
 
       - name: Test
-        if: steps.app.outputs.present == 'true'
         run: npm test
 
       - name: Build development bundle
-        if: steps.app.outputs.present == 'true'
         run: npm run build:dev
