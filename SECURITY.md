@@ -22,3 +22,7 @@ Laloba generates software, so generated content and generated code are untrusted
 ## Supported versions
 
 Until the first stable release, security fixes target the current default branch.
+
+## Authentication secrets
+
+Preview OAuth credentials are runtime secrets. Do not commit shared client secrets, deployment credentials, signing keys, provider API keys, or generated-app secrets to this repository. Preview authentication must read `GROK_PREVIEW_CLIENT_ID` and `GROK_PREVIEW_CLIENT_SECRET` from the server environment. Values exposed through `VITE_*` are considered public client configuration and must never contain secrets.
