@@ -3,6 +3,7 @@ import { createProjectSnapshot,projectTreeSha256,sha256 } from "./project-files"
 import { assertGenerationId } from "./generation-id";
 import { assertProjectId } from "./project-id";
 import { validateProjectArtifact } from "./project-artifact";
+import { createGenerationManifest } from "./generation-manifest";
 
 export const PATCH_AUTHORIZATION_TTL_MS=10*60*1000;
 
@@ -61,6 +62,11 @@ export async function authorizePatch(
  const files=await applyGenerationPatch(currentFiles,pending.patch);
  const artifact=validateProjectArtifact(files);
  if(!artifact.ok)throw new Error(`Patch would produce an invalid project: ${artifact.reason}`);
- const snapshot=await createProjectSnapshot(pending.generationId,artifact.files);
- return{files:artifact.files,snapshot};
+ const authorizedAt=now.toISOString();
+ const [snapshot,manifest]=await Promise.all([
+  createProjectSnapshot(pending.generationId,artifact.files,authorizedAt),
+  createGenerationManifest(pending.generationId,{schemaVersion:"2",summary:pending.patch.summary,files:artifact.files},authorizedAt),
+ ]);
+ if(snapshot.treeSha256!==manifest.treeSha256)throw new Error("Patch integrity mismatch");
+ return{files:artifact.files,snapshot,manifest};
 }
