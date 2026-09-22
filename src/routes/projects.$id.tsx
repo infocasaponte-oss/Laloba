@@ -17,6 +17,8 @@ import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { stripHtmlBlock } from "@/lib/html-apps";
 import { authorizeGeneration, prepareGenerationAuthorization, type PendingGenerationAuthorization } from "@/lib/generation-authorization";
 import { parseGenerationResult } from "@/lib/generation-result";
+import { parseGenerationPatch } from "@/lib/generation-patch";
+import { authorizePatch, preparePatchAuthorization, type PendingPatchAuthorization } from "@/lib/generation-patch-authorization";
 import type { GenerationResult } from "@/lib/generation-result";
 import { createGenerationId } from "@/lib/generation-id";
 import { loadProjectHistory, recordProjectGeneration, restoreProjectGeneration } from "@/lib/project-history-store";
@@ -50,35 +52,68 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   const [historyOpen,setHistoryOpen]=useState(false), [shareOpen,setShareOpen]=useState(false), [publishOpen,setPublishOpen]=useState(false);
   const [commentsOpen,setCommentsOpen]=useState(false), [selectMode,setSelectMode]=useState(false), [streaming,setStreaming]=useState<string|null>(null);
   const [pendingGeneration,setPendingGeneration]=useState<PendingGenerationAuthorization|null>(null);
+  const [pendingPatch,setPendingPatch]=useState<PendingPatchAuthorization|null>(null);
   const currentHtml=entrypointHtml(project.tree);
   if(!currentHtml)throw new Error("Project tree is missing a valid index.html");
   const busy=streaming!==null, started=useRef(false);
   const generationHistory = historyOpen ? loadProjectHistory(projectId) : null;
 
-  async function run(prompt:string, mode:Mode) {
-    if (busy) return;
-    const userMsg={id:uid("m"),role:"user" as const,content:prompt,mode,createdAt:Date.now()};
-    appendMessage(projectId,userMsg); setStreaming(""); const t0=Date.now();
-    try {
-      const text=await streamChat({mode,messages:[...project.messages,userMsg].map((m)=>({role:m.role,content:m.content})),currentHtml:mode==="build"?currentHtml:undefined,knowledge:project.knowledge||knowledge,onDelta:(c)=>setStreaming((s)=>(s??"")+c)});
-      const structured = mode === "build" ? parseGenerationResult(text) : null;
-      const html = structured?.ok ? structured.result.files[0].content : null;
-      const visible = structured?.ok
-        ? structured.result.summary
-        : structured && !structured.ok
-          ? `No apliqué el resultado: ${structured.reason}`
-          : stripHtmlBlock(text) || text;
-      if(html&&mode==="build"&&structured?.ok) {
-        if(currentHtml.trim()){
-          setPendingGeneration(await prepareGenerationAuthorization(createGenerationId(),projectId,prompt,structured.result,currentHtml));
+  async function run(prompt:string, mode:Mode, reuseLastUser=false) {
+    if(busy)return;
+    const last=project.messages.at(-1);
+    const userMsg=reuseLastUser&&last?.role==="user"
+      ? last
+      : {id:uid("m"),role:"user" as const,content:prompt,mode,createdAt:Date.now()};
+    if(!reuseLastUser)appendMessage(projectId,userMsg);
+    setStreaming("");
+    const t0=Date.now();
+    try{
+      const initialBuild=mode==="build"&&reuseLastUser&&project.messages.every((message)=>message.role!=="assistant");
+      const buildKind=mode==="build"?(initialBuild?"initial":"patch"):undefined;
+      const outboundMessages=(reuseLastUser?project.messages:[...project.messages,userMsg]).map((message)=>({role:message.role,content:message.content}));
+      const text=await streamChat({
+        mode,
+        buildKind,
+        messages:outboundMessages,
+        currentHtml:buildKind==="initial"?currentHtml:undefined,
+        currentFiles:buildKind==="patch"?project.tree.files:undefined,
+        knowledge:project.knowledge||knowledge,
+        onDelta:(chunk)=>setStreaming((value)=>(value??"")+chunk),
+      });
+
+      const initialResult=mode==="build"&&buildKind==="initial"?parseGenerationResult(text):null;
+      const patchResult=mode==="build"&&buildKind==="patch"?parseGenerationPatch(text):null;
+      let visible=stripHtmlBlock(text)||text;
+      let filesChanged:string[]=[];
+
+      if(initialResult){
+        if(initialResult.ok){
+          visible=initialResult.result.summary;
+          filesChanged=["index.html"];
+          setPendingGeneration(await prepareGenerationAuthorization(createGenerationId(),projectId,prompt,initialResult.result,currentHtml));
         }else{
-          await applyAuthorizedGeneration(structured.result,prompt);
+          visible=`No apliqué el resultado: ${initialResult.reason}`;
         }
       }
-      const credits=mode==="plan"?0.4:1.1; spendCredits(credits);
-      appendMessage(projectId,{id:uid("m"),role:"assistant",content:visible,mode,createdAt:Date.now(),credits,durationMs:Date.now()-t0,filesChanged:html?["index.html"]:[]});
-    } catch(err) { appendMessage(projectId,{id:uid("m"),role:"assistant",content:err instanceof Error?err.message:"No se pudo completar",mode,createdAt:Date.now()}); }
-    finally { setStreaming(null); }
+
+      if(patchResult){
+        if(patchResult.ok){
+          visible=patchResult.patch.summary;
+          filesChanged=patchResult.patch.operations.map((operation)=>operation.path);
+          setPendingPatch(await preparePatchAuthorization(createGenerationId(),projectId,prompt,patchResult.patch,project.tree.files));
+        }else{
+          visible=`No apliqué el patch: ${patchResult.reason}`;
+        }
+      }
+
+      const credits=mode==="plan"?0.4:1.1;
+      spendCredits(credits);
+      appendMessage(projectId,{id:uid("m"),role:"assistant",content:visible,mode,createdAt:Date.now(),credits,durationMs:Date.now()-t0,filesChanged});
+    }catch(err){
+      appendMessage(projectId,{id:uid("m"),role:"assistant",content:err instanceof Error?err.message:"No se pudo completar",mode,createdAt:Date.now()});
+    }finally{
+      setStreaming(null);
+    }
   }
   async function applyAuthorizedGeneration(result:GenerationResult,prompt:string) {
     const pending=await prepareGenerationAuthorization(createGenerationId(),projectId,prompt,result,currentHtml);
@@ -99,7 +134,16 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
     setProjectFiles(projectId,pending.generationId,snapshot.files.map(({path,content})=>({path,content})),pending.prompt.slice(0,40));
   }
 
-  useEffect(()=>{if(!autostart||started.current)return;const last=project.messages.at(-1);if(last?.role==="user"&&project.messages.filter((m)=>m.role==="assistant").length===0){started.current=true;void run(last.content,last.mode)}},[autostart]);
+  async function applyPendingPatch(pending:PendingPatchAuthorization) {
+    const current=useLaloba.getState().projects.find((candidate)=>candidate.id===projectId);
+    if(!current)throw new Error("Project no longer exists");
+    const {files,manifest,snapshot}=await authorizePatch(pending,projectId,current.tree.files);
+    recordProjectGeneration(projectId,{id:pending.generationId,summary:pending.patch.summary,snapshot});
+    console.info("laloba:patch",{generationId:pending.generationId,manifest,snapshot,operations:pending.patch.operations,authorized:true});
+    setProjectFiles(projectId,pending.generationId,files,pending.patch.summary.slice(0,40));
+  }
+
+  useEffect(()=>{if(!autostart||started.current)return;const last=project.messages.at(-1);if(last?.role==="user"&&project.messages.filter((m)=>m.role==="assistant").length===0){started.current=true;void run(last.content,last.mode,true)}},[autostart]);
   const tabs:{id:Tab;label:string}[]=[{id:"preview",label:"Vista previa"},{id:"files",label:"Archivos"},{id:"code",label:"Código"},{id:"more",label:"Más"}];
 
   return <TooltipProvider><div className="flex h-dvh flex-col bg-bg text-fg">
