@@ -29,3 +29,14 @@ Therefore the migration rule is strict:
 5. Once imported, the first integration change must preserve the legacy `project.html` field as a compatibility projection of `ProjectTree v2`, not as the source of truth.
 
 This blocker is intentional: provenance is part of the security boundary for a system that generates and executes code.
+
+
+## Runtime recovery update — 2026-09-22
+
+A user-provided canonical workspace archive, `grok-workspace.zip`, became available in the conversation file surface after the original blocker was documented.
+
+The archive contains the previously missing runtime modules plus their dependency `src/lib/catalog.ts`, and contains the authoritative `package-lock.json`. Archive and per-file SHA-256 values are recorded in `docs/SOURCE-RECOVERY-PROVENANCE.md`.
+
+The runtime module portion of the blocker is therefore resolved on the hardening branch. The remaining source-normalization blocker is importing the authoritative lockfile byte-for-byte and then proving the complete application source/dependency graph from a clean checkout.
+
+Do not interpret presence of the six recovered runtime files alone as completion of normalization: CI/typecheck may reveal additional canonical application files that must be restored from the same archive.
