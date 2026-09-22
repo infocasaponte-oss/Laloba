@@ -30,22 +30,20 @@ jobs:
         run: |
           set -euo pipefail
           if ! compgen -G '.laloba-transfer/*.b64' > /dev/null; then
-            echo "No temporary transfer payload present."
             exit 0
           fi
-
-          count="$(find .laloba-transfer -maxdepth 1 -type f -name '*.b64' | wc -l)"
-          bytes="$(cat .laloba-transfer/*.b64 | tr -d '\r\n' | wc -c)"
-          echo "Transfer fragments: $count"
-          echo "Encoded bytes: $bytes"
-
-          # Validate each staged fragment as Base64 independently. The historical
-          # upload did not persist a canonical manifest describing how multiple
-          # upload batches should be concatenated, so CI must not guess ordering.
           while IFS= read -r part; do
-            echo "Validating $part"
             tr -d '\r\n' < "$part" | base64 --decode > /dev/null
           done < <(find .laloba-transfer -maxdepth 1 -type f -name '*.b64' -print | sort)
 
-          echo "Transfer fragments are syntactically valid Base64."
-          echo "Full archive restoration requires a canonical fragment manifest."
+      - name: Install dependencies
+        if: hashFiles('package-lock.json') != ''
+        run: npm ci
+
+      - name: Typecheck
+        if: hashFiles('package-lock.json') != ''
+        run: npm run typecheck
+
+      - name: Test
+        if: hashFiles('package-lock.json') != ''
+        run: npm test
