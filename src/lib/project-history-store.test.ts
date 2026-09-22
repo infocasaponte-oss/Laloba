@@ -37,7 +37,7 @@ test("fails closed on malformed or structurally inconsistent persisted history",
  Object.defineProperty(globalThis,"localStorage",{value:store,configurable:true});
  store.setItem("laloba:project-history:project-3",JSON.stringify({schemaVersion:"1",currentGenerationId:"missing",generations:[]}));
  assert.equal(loadProjectHistory("project-3").generations.length,0);
- const snapshot=await createProjectSnapshot("gen_test_3",[{path:"index.html",content:"safe"}]);
+ const snapshot=await createProjectSnapshot("gen_test_3",[{path:"index.html",content:"<!doctype html><html><body>safe</body></html>"}]);
  store.setItem("laloba:project-history:project-4",JSON.stringify({schemaVersion:"1",currentGenerationId:"other",generations:[{id:"other",summary:"x",snapshot}]}));
  assert.equal(loadProjectHistory("project-4").generations.length,0);
 });
@@ -45,7 +45,7 @@ test("fails closed on malformed or structurally inconsistent persisted history",
 test("rejects duplicate persisted generation ids",async()=>{
  const store=new MemoryStorage();
  Object.defineProperty(globalThis,"localStorage",{value:store,configurable:true});
- const snapshot=await createProjectSnapshot("gen_test_4",[{path:"index.html",content:"safe"}]);
+ const snapshot=await createProjectSnapshot("gen_test_4",[{path:"index.html",content:"<!doctype html><html><body>safe</body></html>"}]);
  const generation={id:"gen_test_4",summary:"x",snapshot};
  store.setItem("laloba:project-history:project-5",JSON.stringify({schemaVersion:"1",currentGenerationId:"gen_test_4",generations:[generation,generation]}));
  assert.equal(loadProjectHistory("project-5").generations.length,0);
@@ -54,14 +54,14 @@ test("rejects duplicate persisted generation ids",async()=>{
 
 test("rejects structurally inconsistent history before persisting",async()=>{
  Object.defineProperty(globalThis,"localStorage",{value:new MemoryStorage(),configurable:true});
- const snapshot=await createProjectSnapshot("gen_test_5",[{path:"index.html",content:"safe"}]);
+ const snapshot=await createProjectSnapshot("gen_test_5",[{path:"index.html",content:"<!doctype html><html><body>safe</body></html>"}]);
  const invalid={schemaVersion:"1" as const,currentGenerationId:"gen_test_5",generations:[{id:"generation_other",summary:"x",snapshot}]};
  assert.throws(()=>saveProjectHistory("project-6",invalid),/Invalid project history/);
 });
 
 test("persists the normalized history representation",async()=>{
  Object.defineProperty(globalThis,"localStorage",{value:new MemoryStorage(),configurable:true});
- const snapshot=await createProjectSnapshot("gen_test_6",[{path:"index.html",content:"safe"}]);
+ const snapshot=await createProjectSnapshot("gen_test_6",[{path:"index.html",content:"<!doctype html><html><body>safe</body></html>"}]);
  saveProjectHistory("project-7",{schemaVersion:"1",currentGenerationId:"gen_test_6",generations:[{id:"gen_test_6",summary:"  normalized  ",snapshot}]});
  assert.equal(loadProjectHistory("project-7").generations[0].summary,"normalized");
 });
