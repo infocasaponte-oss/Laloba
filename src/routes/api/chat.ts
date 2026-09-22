@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { requireUserId, UnauthorizedError } from "@/lib/auth/verify.server";
 
 const MAX_REQUEST_BYTES = 96_000;
 const UPSTREAM_TIMEOUT_MS = 75_000;
@@ -35,6 +36,13 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        try {
+          await requireUserId();
+        } catch (error) {
+          if (error instanceof UnauthorizedError) return jsonError("Unauthorized", 401);
+          return jsonError("Authentication unavailable", 503);
+        }
+
         const apiKey = process.env.XAI_API_KEY;
         if (!apiKey) return jsonError("AI is not available", 503);
 
