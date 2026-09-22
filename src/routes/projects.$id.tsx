@@ -19,6 +19,7 @@ import { parseGenerationResult } from "@/lib/generation-result";
 import { createGenerationManifest } from "@/lib/generation-manifest";
 import { createGenerationId } from "@/lib/generation-id";
 import { createProjectSnapshot } from "@/lib/project-files";
+import { recordProjectGeneration } from "@/lib/project-history-store";
 import { streamChat } from "@/lib/stream-chat";
 import { useHasHydrated, useLaloba } from "@/lib/store";
 import type { Mode } from "@/lib/types";
