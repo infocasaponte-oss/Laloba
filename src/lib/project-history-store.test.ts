@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createProjectSnapshot } from "./project-files.ts";
-import { loadProjectHistory, recordProjectGeneration, restoreProjectGeneration } from "./project-history-store.ts";
+import { loadProjectHistory, recordProjectGeneration, restoreProjectGeneration, saveProjectHistory } from "./project-history-store.ts";
 
 class MemoryStorage {
   private data = new Map<string,string>();
@@ -49,4 +49,19 @@ test("rejects duplicate persisted generation ids",async()=>{
  const generation={id:"gen_test_4",summary:"x",snapshot};
  store.setItem("laloba:project-history:project-5",JSON.stringify({schemaVersion:"1",currentGenerationId:"gen_test_4",generations:[generation,generation]}));
  assert.equal(loadProjectHistory("project-5").generations.length,0);
+});
+
+
+test("rejects structurally inconsistent history before persisting",async()=>{
+ Object.defineProperty(globalThis,"localStorage",{value:new MemoryStorage(),configurable:true});
+ const snapshot=await createProjectSnapshot("gen_test_5",[{path:"index.html",content:"safe"}]);
+ const invalid={schemaVersion:"1" as const,currentGenerationId:"gen_test_5",generations:[{id:"generation_other",summary:"x",snapshot}]};
+ assert.throws(()=>saveProjectHistory("project-6",invalid),/Invalid project history/);
+});
+
+test("persists the normalized history representation",async()=>{
+ Object.defineProperty(globalThis,"localStorage",{value:new MemoryStorage(),configurable:true});
+ const snapshot=await createProjectSnapshot("gen_test_6",[{path:"index.html",content:"safe"}]);
+ saveProjectHistory("project-7",{schemaVersion:"1",currentGenerationId:"gen_test_6",generations:[{id:"gen_test_6",summary:"  normalized  ",snapshot}]});
+ assert.equal(loadProjectHistory("project-7").generations[0].summary,"normalized");
 });
