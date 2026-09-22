@@ -2,13 +2,14 @@ import { Monitor, Smartphone, Tablet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { hardenPreviewHtml } from "@/lib/preview-security";
 
 const widths = { desktop: "100%", tablet: 768, phone: 390 } as const;
 
 export function PreviewPane({ html, selectMode }: { html: string; selectMode: boolean }) {
   const [device, setDevice] = useState<keyof typeof widths>("desktop");
   const srcDoc = useMemo(() => {
-    if (!selectMode) return html;
+    if (!selectMode) return hardenPreviewHtml(html);
     const inject = `<script>
       document.addEventListener('click', (e) => {
         const t = e.target;
@@ -18,7 +19,7 @@ export function PreviewPane({ html, selectMode }: { html: string; selectMode: bo
         t.focus();
       }, true);
     </script>`;
-    return html.replace("</body>", `${inject}</body>`);
+    return hardenPreviewHtml(html.replace("</body>", `${inject}</body>`));
   }, [html, selectMode]);
 
   return (
@@ -30,7 +31,7 @@ export function PreviewPane({ html, selectMode }: { html: string; selectMode: bo
         {selectMode && <span className="ml-2 text-xs text-muted">Edición visual · clic en un texto</span>}
       </div>
       <div className="flex min-h-0 flex-1 justify-center overflow-auto p-3">
-        <iframe title="Vista previa" srcDoc={srcDoc} className={cn("h-full rounded-lg bg-elevated shadow-[var(--shadow-border)]", device === "desktop" ? "w-full" : "")} style={device === "desktop" ? undefined : { width: widths[device], maxWidth: "100%" }} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" />
+        <iframe title="Vista previa" srcDoc={srcDoc} className={cn("h-full rounded-lg bg-elevated shadow-[var(--shadow-border)]", device === "desktop" ? "w-full" : "")} style={device === "desktop" ? undefined : { width: widths[device], maxWidth: "100%" }} sandbox="allow-scripts" referrerPolicy="no-referrer" />
       </div>
     </div>
   );
