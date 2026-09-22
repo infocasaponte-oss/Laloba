@@ -3,6 +3,7 @@ import { validateGeneratedPath } from "./generated-path";
 import type { ProjectTree } from "./project-tree";
 import { projectTreeSha256 } from "./project-files";
 import { isValidGenerationId } from "./generation-id";
+import { assertProjectId } from "./project-id";
 
 const KEY_PREFIX="laloba:project-tree:v2:";
 const MAX_STORAGE_BYTES=2_500_000;
@@ -24,8 +25,7 @@ function browserStorage():ProjectTreeStorage|null{
  return typeof localStorage==="undefined"?null:localStorage;
 }
 
-function validateProjectId(projectId:string){if(!/^[A-Za-z0-9._:-]{1,128}$/.test(projectId))throw new Error("Invalid project id");return projectId}
-export function projectTreeStorageKey(projectId:string){return `${KEY_PREFIX}${validateProjectId(projectId)}`}
+export function projectTreeStorageKey(projectId:string){return `${KEY_PREFIX}${assertProjectId(projectId)}`}
 
 export async function saveProjectTree(projectId:string,tree:ProjectTree,storage:ProjectTreeStorage|null=browserStorage()){
  const key=projectTreeStorageKey(projectId);
