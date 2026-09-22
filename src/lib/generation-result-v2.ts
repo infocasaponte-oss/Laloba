@@ -16,7 +16,7 @@ export const generationResultV2Schema = z.object({
   files: z.array(fileSchema).min(1).max(MAX_FILES),
 }).strict();
 
-export function parseGenerationResultV2(text: string) {
+export type GenerationResultV2 = z.infer<typeof generationResultV2Schema>;\n\nexport function parseGenerationResultV2(text: string) {
   let raw: unknown;
   try { raw = JSON.parse(text.trim()); }
   catch { return { ok: false as const, reason: "El generador no devolvió JSON válido." }; }
