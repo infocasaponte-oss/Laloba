@@ -1,6 +1,6 @@
-import { generationResultSha256, type GenerationResult } from "./generation-result";
+import { generationResultSha256,type GenerationResult } from "./generation-result";
 import { createGenerationManifest } from "./generation-manifest";
-import { createProjectSnapshot, sha256, type ProjectSnapshot } from "./project-files";
+import { createProjectSnapshot,sha256,type ProjectSnapshot } from "./project-files";
 import { assertGenerationId } from "./generation-id";
 import { assertProjectId } from "./project-id";
 
@@ -15,21 +15,41 @@ export type PendingGenerationAuthorization={
  resultSha256:string;
  previousHtmlSha256:string;
  preparedAt:string;
+ authorizationSha256:string;
 };
+
+async function authorizationSha256(input:Omit<PendingGenerationAuthorization,"result"|"authorizationSha256">){
+ return sha256(JSON.stringify({
+  schemaVersion:"1",
+  generationId:input.generationId,
+  projectId:input.projectId,
+  prompt:input.prompt,
+  resultSha256:input.resultSha256,
+  previousHtmlSha256:input.previousHtmlSha256,
+  preparedAt:input.preparedAt,
+ }));
+}
 
 export async function prepareGenerationAuthorization(
  generationId:string,projectId:string,prompt:string,result:GenerationResult,currentHtml:string,now=new Date()
 ):Promise<PendingGenerationAuthorization>{
  assertGenerationId(generationId);
  assertProjectId(projectId);
- return{schemaVersion:"1",generationId,projectId,prompt,result,resultSha256:await generationResultSha256(result),previousHtmlSha256:await sha256(currentHtml),preparedAt:now.toISOString()};
+ const resultSha=await generationResultSha256(result);
+ const previousHtmlSha=await sha256(currentHtml);
+ const preparedAt=now.toISOString();
+ const envelope={schemaVersion:"1" as const,generationId,projectId,prompt,resultSha256:resultSha,previousHtmlSha256:previousHtmlSha,preparedAt};
+ return{...envelope,result,authorizationSha256:await authorizationSha256(envelope)};
 }
 
 export async function authorizeGeneration(
  pending:PendingGenerationAuthorization,projectId:string,currentHtml:string,now=new Date()
 ):Promise<{snapshot:ProjectSnapshot;manifest:Awaited<ReturnType<typeof createGenerationManifest>>}>{
+ assertGenerationId(pending.generationId);
  assertProjectId(projectId);
  assertProjectId(pending.projectId);
+ const envelope={schemaVersion:pending.schemaVersion,generationId:pending.generationId,projectId:pending.projectId,prompt:pending.prompt,resultSha256:pending.resultSha256,previousHtmlSha256:pending.previousHtmlSha256,preparedAt:pending.preparedAt};
+ if(await authorizationSha256(envelope)!==pending.authorizationSha256)throw new Error("Authorization envelope changed after preparation");
  if(pending.projectId!==projectId)throw new Error("Authorization belongs to another project");
  const preparedAt=Date.parse(pending.preparedAt);
  if(!Number.isFinite(preparedAt)||now.getTime()-preparedAt>GENERATION_AUTHORIZATION_TTL_MS||now.getTime()<preparedAt)throw new Error("Authorization expired; regenerate before applying");
