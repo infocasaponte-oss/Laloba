@@ -42,3 +42,24 @@ Safety invariants:
 - no dependency installation or shell execution implied by generated files.
 
 Editor activation still requires canonical runtime source normalization plus an isolated build runner. Until those integration boundaries exist, v1 remains the active editor execution contract and v2 remains the hardened target contract.
+
+
+## Editor integration status — 2026-09-22
+
+The live editor now uses `ProjectTree v2` as its canonical in-memory source model while retaining `project.html` and `project.files` only as compatibility projections.
+
+Build behavior is split deliberately:
+
+- the first autostart generation still uses the strict v1 full-document result for compatibility;
+- subsequent build requests use the v2 patch contract;
+- patch requests carry the current validated project files as untrusted context;
+- the server computes SHA-256 hashes for the base files and instructs the model to copy exact hashes into update/delete operations;
+- the client parses the response with `parseGenerationPatch`;
+- `preparePatchAuthorization` binds the proposal to the complete base tree;
+- approval UI lists every create/update/delete operation;
+- `authorizePatch` rejects stale/tampered proposals and produces a coherent snapshot + manifest;
+- the approved generation ID becomes the project's `currentGenerationId`.
+
+The autostart path also reuses the already persisted initial user message instead of appending it a second time.
+
+Remaining protocol migration work: promote initial creation from v1 to `GenerationResultV2`, then remove the v1 generation contract after migration compatibility is no longer needed.
