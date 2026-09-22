@@ -5,7 +5,10 @@ import { isTrustedMutationOrigin } from "@/lib/auth/request-origin.server";
 import { sha256 } from "@/lib/project-files";
 import { generationChatRequestSchema, MAX_GENERATION_REQUEST_BYTES } from "@/lib/generation-request";
 
-const UPSTREAM_TIMEOUT_MS=75_000;\nconst encoder=new TextEncoder();\n\nconst SYSTEM_BUILD_INITIAL=`Eres Laloba, un agente que construye aplicaciones web.
+const UPSTREAM_TIMEOUT_MS=75_000;
+const encoder=new TextEncoder();
+
+const SYSTEM_BUILD_INITIAL=`Eres Laloba, un agente que construye aplicaciones web.
 Responde SIEMPRE en español de España, tono sobrio, sin emojis.
 Devuelve exclusivamente JSON válido con este contrato exacto: {"schemaVersion":"1","summary":"descripción breve","files":[{"path":"index.html","content":"<!doctype html>..."}]}. No uses bloques Markdown ni texto fuera del JSON. El único path permitido en v1 es index.html. El contenido debe ser un documento HTML5 completo, autónomo, bonito, oscuro, mobile-first.
 La app debe ser usable con comportamiento local.
