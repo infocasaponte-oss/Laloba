@@ -45,6 +45,12 @@ jobs:
             tr -d '\r\n' < "$part" | base64 --decode > /dev/null
           done
 
+      - name: Verify canonical lockfile transfer
+        run: node scripts/restore-canonical-lockfile.mjs
+
+      - name: Remove reconstructed lockfile after verification
+        run: rm -f package-lock.json
+
   application:
     runs-on: ubuntu-latest
     timeout-minutes: 30
