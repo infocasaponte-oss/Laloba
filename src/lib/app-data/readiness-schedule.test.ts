@@ -24,13 +24,7 @@ describe("readinessProbeDelayMs", () => {
 describe("readinessProbeExhausted", () => {
   it("gives up only once the total wait budget has elapsed", () => {
     assert.equal(readinessProbeExhausted(1_000, 1_000), false);
-    assert.equal(
-      readinessProbeExhausted(1_000, 1_000 + READINESS_PROBE_MAX_TOTAL_MS - 1),
-      false,
-    );
-    assert.equal(
-      readinessProbeExhausted(1_000, 1_000 + READINESS_PROBE_MAX_TOTAL_MS),
-      true,
-    );
+    assert.equal(readinessProbeExhausted(1_000, 1_000 + READINESS_PROBE_MAX_TOTAL_MS - 1), false);
+    assert.equal(readinessProbeExhausted(1_000, 1_000 + READINESS_PROBE_MAX_TOTAL_MS), true);
   });
 });
