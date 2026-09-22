@@ -14,7 +14,7 @@ import { Dropdown, DropdownContent, DropdownItem, DropdownLabel, DropdownSep, Dr
 import { Input, Textarea } from "@/components/ui/input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
-import { extractHtml, stripHtmlBlock } from "@/lib/html-apps";
+import { stripHtmlBlock } from "@/lib/html-apps";
 import { parseGenerationResult } from "@/lib/generation-result";
 import { createGenerationManifest } from "@/lib/generation-manifest";
 import { createGenerationId } from "@/lib/generation-id";
