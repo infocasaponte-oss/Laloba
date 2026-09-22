@@ -2,6 +2,7 @@ import type { GenerationResultV2 } from "./generation-result-v2";
 import type { ProjectSourceFile } from "./generation-patch";
 import { createProjectSnapshot, projectTreeSha256, type ProjectSnapshot } from "./project-files";
 import { validateGeneratedPath } from "./generated-path";
+import { assertGenerationId } from "./generation-id";
 
 export type ProjectTree={schemaVersion:"2";generationId:string;files:ProjectSourceFile[]};
 
@@ -18,7 +19,7 @@ function canonicalFiles(files:ProjectSourceFile[]){
 }
 
 export function projectTreeFromGeneration(generationId:string,result:GenerationResultV2):ProjectTree{
- return{schemaVersion:"2",generationId,files:canonicalFiles(result.files)};
+ return{schemaVersion:"2",generationId:assertGenerationId(generationId),files:canonicalFiles(result.files)};
 }
 export async function snapshotProjectTree(tree:ProjectTree,createdAt?:string):Promise<ProjectSnapshot>{
  return createProjectSnapshot(tree.generationId,tree.files,createdAt);
@@ -27,5 +28,5 @@ export async function projectTreeIdentity(tree:ProjectTree){return projectTreeSh
 export function entrypointHtml(tree:ProjectTree):string|null{return tree.files.find(file=>file.path==="index.html")?.content??null}
 export function replaceProjectTreeGeneration(tree:ProjectTree,generationId:string,files:ProjectSourceFile[]):ProjectTree{
  void tree;
- return{schemaVersion:"2",generationId,files:canonicalFiles(files)};
+ return{schemaVersion:"2",generationId:assertGenerationId(generationId),files:canonicalFiles(files)};
 }
