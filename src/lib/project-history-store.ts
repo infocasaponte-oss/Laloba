@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ProjectGeneration,ProjectHistory } from "./project-history";
 import { appendGeneration,emptyProjectHistory,restoreGeneration } from "./project-history";
-import { projectFileSchema } from "./project-files";
+import { projectSnapshotSchema } from "./project-files";
 import { isValidGenerationId } from "./generation-id";
 import { assertProjectId } from "./project-id";
 
@@ -9,8 +9,7 @@ const STORAGE_PREFIX="laloba:project-history:";
 const MAX_SERIALIZED_BYTES=2_500_000;
 const LEGACY_MIGRATION_MARKER="legacy-migrated";
 const generationIdSchema=z.string().refine(isValidGenerationId);
-const snapshotSchema=z.object({schemaVersion:z.literal("1"),generationId:generationIdSchema,createdAt:z.string().min(1).max(64),files:z.array(projectFileSchema).max(80),treeSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
-const generationSchema=z.object({id:generationIdSchema,summary:z.string().trim().min(1).max(800),snapshot:snapshotSchema}).strict();
+const generationSchema=z.object({id:generationIdSchema,summary:z.string().trim().min(1).max(800),snapshot:projectSnapshotSchema}).strict();
 const historySchema=z.object({schemaVersion:z.literal("1"),currentGenerationId:generationIdSchema.nullable(),generations:z.array(generationSchema).max(50)}).strict();
 
 function storageKey(projectId:string){return STORAGE_PREFIX+assertProjectId(projectId)}
