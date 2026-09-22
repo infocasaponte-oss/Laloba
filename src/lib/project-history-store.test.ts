@@ -65,3 +65,13 @@ test("persists the normalized history representation",async()=>{
  saveProjectHistory("project-7",{schemaVersion:"1",currentGenerationId:"gen_test_6",generations:[{id:"gen_test_6",summary:"  normalized  ",snapshot}]});
  assert.equal(loadProjectHistory("project-7").generations[0].summary,"normalized");
 });
+
+test("fails closed on persisted snapshots missing treeSha256",async()=>{
+ const store=new MemoryStorage();
+ Object.defineProperty(globalThis,"localStorage",{value:store,configurable:true});
+ const snapshot=await createProjectSnapshot("gen_test_8",[{path:"index.html",content:"<!doctype html><html></html>"}]);
+ const rawSnapshot={...snapshot} as Record<string,unknown>;
+ delete rawSnapshot.treeSha256;
+ store.setItem("laloba:project-history:project-8",JSON.stringify({schemaVersion:"1",currentGenerationId:"gen_test_8",generations:[{id:"gen_test_8",summary:"legacy",snapshot:rawSnapshot}]}));
+ assert.equal(loadProjectHistory("project-8").generations.length,0);
+});
