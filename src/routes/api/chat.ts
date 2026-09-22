@@ -1,43 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
 import { requireUserId,UnauthorizedError } from "@/lib/auth/verify.server";
 import { consumeGenerationQuota } from "@/lib/generation-rate-limit.server";
 import { isTrustedMutationOrigin } from "@/lib/auth/request-origin.server";
 import { sha256 } from "@/lib/project-files";
+import { generationChatRequestSchema, MAX_GENERATION_REQUEST_BYTES } from "@/lib/generation-request";
 
-const MAX_REQUEST_BYTES=96_000;
-const MAX_PATCH_CONTEXT_BYTES=56_000;
-const UPSTREAM_TIMEOUT_MS=75_000;
-const encoder=new TextEncoder();
-
-const messageSchema=z.object({
- role:z.enum(["user","assistant"]),
- content:z.string().trim().min(1).max(12_000),
-}).strict();
-
-const sourceFileSchema=z.object({
- path:z.string().min(1).max(180),
- content:z.string().max(40_000),
-}).strict();
-
-const requestSchema=z.object({
- mode:z.enum(["build","plan"]).default("build"),
- buildKind:z.enum(["initial","patch"]).optional(),
- messages:z.array(messageSchema).min(1).max(24),
- currentHtml:z.string().max(40_000).optional(),
- currentFiles:z.array(sourceFileSchema).min(1).max(80).optional(),
- knowledge:z.string().max(4_000).optional(),
-}).strict().superRefine((value,ctx)=>{
- if(value.mode==="build"&&value.buildKind==="patch"&&!value.currentFiles?.length){
-  ctx.addIssue({code:"custom",message:"Patch generation requires current files",path:["currentFiles"]});
- }
- if(value.currentFiles){
-  const total=value.currentFiles.reduce((sum,file)=>sum+encoder.encode(file.content).byteLength,0);
-  if(total>MAX_PATCH_CONTEXT_BYTES)ctx.addIssue({code:"custom",message:"Patch context too large",path:["currentFiles"]});
- }
-});
-
-const SYSTEM_BUILD_INITIAL=`Eres Laloba, un agente que construye aplicaciones web.
+const UPSTREAM_TIMEOUT_MS=75_000;\nconst encoder=new TextEncoder();\n\nconst SYSTEM_BUILD_INITIAL=`Eres Laloba, un agente que construye aplicaciones web.
 Responde SIEMPRE en español de España, tono sobrio, sin emojis.
 Devuelve exclusivamente JSON válido con este contrato exacto: {"schemaVersion":"1","summary":"descripción breve","files":[{"path":"index.html","content":"<!doctype html>..."}]}. No uses bloques Markdown ni texto fuera del JSON. El único path permitido en v1 es index.html. El contenido debe ser un documento HTML5 completo, autónomo, bonito, oscuro, mobile-first.
 La app debe ser usable con comportamiento local.
@@ -83,16 +51,16 @@ export const Route=createFileRoute("/api/chat")({
     if(!apiKey)return jsonError("AI is not available",503);
 
     const contentLength=Number(request.headers.get("content-length")??"0");
-    if(Number.isFinite(contentLength)&&contentLength>MAX_REQUEST_BYTES)return jsonError("Request too large",413);
+    if(Number.isFinite(contentLength)&&contentLength>MAX_GENERATION_REQUEST_BYTES)return jsonError("Request too large",413);
 
     let raw:unknown;
     try{
      const text=await request.text();
-     if(encoder.encode(text).byteLength>MAX_REQUEST_BYTES)return jsonError("Request too large",413);
+     if(encoder.encode(text).byteLength>MAX_GENERATION_REQUEST_BYTES)return jsonError("Request too large",413);
      raw=JSON.parse(text);
     }catch{return jsonError("Invalid JSON",400)}
 
-    const parsed=requestSchema.safeParse(raw);
+    const parsed=generationChatRequestSchema.safeParse(raw);
     if(!parsed.success)return jsonError("Invalid request",400);
     const body=parsed.data;
 
