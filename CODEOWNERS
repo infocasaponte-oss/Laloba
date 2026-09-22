@@ -1,5 +1,25 @@
 # Repository-wide review ownership.
-# Replace with a dedicated team when the project has additional maintainers.
+# Replace the individual owner with dedicated teams as maintainership grows.
 * @infocasaponte-oss
+
+# Repository and supply-chain controls.
 .github/ @infocasaponte-oss
 scripts/ @infocasaponte-oss
+package.json @infocasaponte-oss
+package-lock.json @infocasaponte-oss
+SECURITY.md @infocasaponte-oss
+
+# Authentication, persistence and migrations.
+migrations/ @infocasaponte-oss
+src/lib/auth/ @infocasaponte-oss
+src/lib/db.ts @infocasaponte-oss
+src/lib/env.server.ts @infocasaponte-oss
+
+# Generation, execution and approval trust boundaries.
+src/routes/api/ @infocasaponte-oss
+src/lib/generation-* @infocasaponte-oss
+src/lib/project-* @infocasaponte-oss
+src/lib/runner-job.ts @infocasaponte-oss
+src/lib/validation-result.ts @infocasaponte-oss
+src/lib/repair-loop.ts @infocasaponte-oss
+src/lib/preview-* @infocasaponte-oss
