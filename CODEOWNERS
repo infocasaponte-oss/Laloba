@@ -1,0 +1,5 @@
+# Repository-wide review ownership.
+# Replace with a dedicated team when the project has additional maintainers.
+* @infocasaponte-oss
+.github/ @infocasaponte-oss
+scripts/ @infocasaponte-oss
