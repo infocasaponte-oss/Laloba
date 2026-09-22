@@ -31,3 +31,22 @@ test("rejects tampered persisted content on restore", async () => {
   localStorage.setItem("laloba:project-history:project-2",JSON.stringify(history));
   await assert.rejects(()=>restoreProjectGeneration("project-2","gen_test_2"),/integrity/i);
 });
+
+test("fails closed on malformed or structurally inconsistent persisted history",async()=>{
+ const store=new MemoryStorage();
+ Object.defineProperty(globalThis,"localStorage",{value:store,configurable:true});
+ store.setItem("laloba:project-history:project-3",JSON.stringify({schemaVersion:"1",currentGenerationId:"missing",generations:[]}));
+ assert.equal(loadProjectHistory("project-3").generations.length,0);
+ const snapshot=await createProjectSnapshot("gen_test_3",[{path:"index.html",content:"safe"}]);
+ store.setItem("laloba:project-history:project-4",JSON.stringify({schemaVersion:"1",currentGenerationId:"other",generations:[{id:"other",summary:"x",snapshot}]}));
+ assert.equal(loadProjectHistory("project-4").generations.length,0);
+});
+
+test("rejects duplicate persisted generation ids",async()=>{
+ const store=new MemoryStorage();
+ Object.defineProperty(globalThis,"localStorage",{value:store,configurable:true});
+ const snapshot=await createProjectSnapshot("gen_test_4",[{path:"index.html",content:"safe"}]);
+ const generation={id:"gen_test_4",summary:"x",snapshot};
+ store.setItem("laloba:project-history:project-5",JSON.stringify({schemaVersion:"1",currentGenerationId:"gen_test_4",generations:[generation,generation]}));
+ assert.equal(loadProjectHistory("project-5").generations.length,0);
+});
