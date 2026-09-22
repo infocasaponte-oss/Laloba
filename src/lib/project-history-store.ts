@@ -16,27 +16,30 @@ const historySchema=z.object({schemaVersion:z.literal("1"),currentGenerationId:g
 function storageKey(projectId:string){return STORAGE_PREFIX+assertProjectId(projectId)}
 function storage(){return typeof localStorage==="undefined"?null:localStorage}
 
+
+function validateHistory(value:unknown):ProjectHistory|null{
+ const parsed=historySchema.safeParse(value);if(!parsed.success)return null;
+ const history=parsed.data as ProjectHistory;
+ const ids=new Set<string>();
+ for(const generation of history.generations){
+  if(ids.has(generation.id)||generation.id!==generation.snapshot.generationId)return null;
+  ids.add(generation.id);
+ }
+ if(history.currentGenerationId!==null&&!ids.has(history.currentGenerationId))return null;
+ return history;
+}
+
 export function loadProjectHistory(projectId:string):ProjectHistory{
  const store=storage();if(!store)return emptyProjectHistory();
  const raw=store.getItem(storageKey(projectId));if(!raw)return emptyProjectHistory();
  if(new TextEncoder().encode(raw).byteLength>MAX_SERIALIZED_BYTES)return emptyProjectHistory();
- try{
-  const parsed=historySchema.safeParse(JSON.parse(raw));if(!parsed.success)return emptyProjectHistory();
-  const value=parsed.data as ProjectHistory;
-  const ids=new Set<string>();
-  for(const generation of value.generations){
-   if(ids.has(generation.id)||generation.id!==generation.snapshot.generationId||!generation.summary.trim())return emptyProjectHistory();
-   ids.add(generation.id);
-  }
-  if(value.currentGenerationId!==null&&!ids.has(value.currentGenerationId))return emptyProjectHistory();
-  return value;
- }catch{return emptyProjectHistory()}
+ try{ return validateHistory(JSON.parse(raw))??emptyProjectHistory() }catch{return emptyProjectHistory()}
 }
 
 export function saveProjectHistory(projectId:string,history:ProjectHistory){
  const store=storage();if(!store)return;
- const parsed=historySchema.safeParse(history);if(!parsed.success)throw new Error("Invalid project history");
- const raw=JSON.stringify(history);
+ const validated=validateHistory(history);if(!validated)throw new Error("Invalid project history");
+ const raw=JSON.stringify(validated);
  if(new TextEncoder().encode(raw).byteLength>MAX_SERIALIZED_BYTES)throw new Error("Project history exceeds local storage safety limit");
  store.setItem(storageKey(projectId),raw);
 }
