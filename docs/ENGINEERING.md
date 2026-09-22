@@ -55,7 +55,9 @@ The default branch should require:
 - unit tests;
 - generator/security tests;
 - build;
-- dependency review where repository capabilities allow it.
+- dependency vulnerability audit;
+- dependency review where repository capabilities allow it;
+- committed-secret scanning with repository-native scanning when available and a fail-closed CI fallback otherwise.
 
 ## Repository normalization
 
@@ -69,12 +71,15 @@ CI runs these gates from a clean checkout:
 
 1. `npm run check:runtime-source`
 2. `npm ci`
-3. `npm run format:check`
-4. `npm run lint`
-5. `npm run typecheck`
-6. `npm run test:generator`
-7. `npm test`
-8. `npm run build:dev`
+3. `npm run audit:dependencies`
+4. `npm run format:check`
+5. `npm run lint`
+6. `npm run typecheck`
+7. `npm run test:generator`
+8. `npm test`
+9. `npm run build:dev`
+
+The dependency vulnerability gate uses the tracked lockfile and fails on high or critical advisories. Repository-native dependency review and secret-scanning features should replace or complement the portable CI fallbacks when the repository plan makes those controls available.
 
 The focused generator suite is intentionally separate: failures in generation contracts, path confinement, preview isolation, rate limiting, snapshot integrity or generated HTML validation block changes even when unrelated application tests pass.
 
