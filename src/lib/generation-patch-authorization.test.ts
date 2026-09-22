@@ -86,3 +86,21 @@ test("rejects patches whose final project exceeds the artifact size limit",async
  const patch={schemaVersion:"2" as const,summary:"too large",operations:[{op:"create" as const,path:"src/e.txt",content:"x".repeat(450_000)}]};
  await assert.rejects(()=>preparePatchAuthorization("generation_patch_9","p1","grow",patch,base),/tamaño total/i);
 });
+
+test("rejects mutation of patch approval metadata after preparation",async()=>{
+ const base=baseFiles();
+ const patch={schemaVersion:"2" as const,summary:"fix",operations:[{op:"update" as const,path:"src/app.ts",baseSha256:await sha256("old"),content:"new"}]};
+ const now=new Date("2026-01-01T00:00:00.000Z");
+ const pending=await preparePatchAuthorization("generation_patch_10","p1","fix",patch,base,now);
+ pending.preparedAt="2026-01-01T00:05:00.000Z";
+ await assert.rejects(()=>authorizePatch(pending,"p1",base,now),/envelope changed/);
+});
+
+test("rejects rebinding a prepared patch approval to another valid project",async()=>{
+ const base=baseFiles();
+ const patch={schemaVersion:"2" as const,summary:"fix",operations:[{op:"update" as const,path:"src/app.ts",baseSha256:await sha256("old"),content:"new"}]};
+ const now=new Date("2026-01-01T00:00:00.000Z");
+ const pending=await preparePatchAuthorization("generation_patch_11","p1","fix",patch,base,now);
+ pending.projectId="p2";
+ await assert.rejects(()=>authorizePatch(pending,"p2",base,now),/envelope changed/);
+});
