@@ -42,3 +42,9 @@ test("rejects expired or future-dated authorizations",async()=>{
  await assert.rejects(()=>authorizePatch(pending,"p1",base,new Date("2026-01-01T00:11:00.000Z")),/expired/);
  await assert.rejects(()=>authorizePatch(pending,"p1",base,new Date("2025-12-31T23:59:59.000Z")),/expired/);
 });
+
+test("rejects malformed generation ids before preparing patch approval",async()=>{
+ const base=[{path:"src/app.ts",content:"old"}];
+ const patch={schemaVersion:"2" as const,summary:"fix",operations:[{op:"update" as const,path:"src/app.ts",baseSha256:await sha256("old"),content:"new"}]};
+ await assert.rejects(()=>preparePatchAuthorization("bad","p1","fix",patch,base),/Invalid generation id/);
+});
