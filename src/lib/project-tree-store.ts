@@ -2,6 +2,7 @@ import { z } from "zod";
 import { validateGeneratedPath } from "./generated-path";
 import type { ProjectTree } from "./project-tree";
 import { projectTreeSha256 } from "./project-files";
+import { isValidGenerationId } from "./generation-id";
 
 const KEY_PREFIX="laloba:project-tree:v2:";
 const MAX_STORAGE_BYTES=2_500_000;
@@ -9,7 +10,7 @@ const encoder=new TextEncoder();
 
 const treeSchema=z.object({
  schemaVersion:z.literal("2"),
- generationId:z.string().min(1).max(120),
+ generationId:z.string().refine(isValidGenerationId),
  files:z.array(z.object({path:z.string().min(1).max(180),content:z.string().max(512_000)}).strict()).min(1).max(80),
 }).strict();
 
@@ -27,7 +28,9 @@ function validateProjectId(projectId:string){if(!/^[A-Za-z0-9._:-]{1,128}$/.test
 export function projectTreeStorageKey(projectId:string){return `${KEY_PREFIX}${validateProjectId(projectId)}`}
 
 export async function saveProjectTree(projectId:string,tree:ProjectTree,storage:ProjectTreeStorage|null=browserStorage()){
+ const key=projectTreeStorageKey(projectId);
  if(!storage)return;
+ if(!isValidGenerationId(tree.generationId))throw new Error("Invalid generation id");
  const seen=new Set<string>();
  for(const file of tree.files){
   const path=validateGeneratedPath(file.path);
@@ -37,12 +40,13 @@ export async function saveProjectTree(projectId:string,tree:ProjectTree,storage:
  }
  const value=JSON.stringify({...tree,treeSha256:await projectTreeSha256(tree.files)});
  if(encoder.encode(value).byteLength>MAX_STORAGE_BYTES)throw new Error("Project tree exceeds browser cache limit");
- storage.setItem(projectTreeStorageKey(projectId),value);
+ storage.setItem(key,value);
 }
 
 export async function loadProjectTree(projectId:string,storage:ProjectTreeStorage|null=browserStorage()):Promise<ProjectTree|null>{
+ const key=projectTreeStorageKey(projectId);
  if(!storage)return null;
- const value=storage.getItem(projectTreeStorageKey(projectId));
+ const value=storage.getItem(key);
  if(!value)return null;
  try{
   const raw=JSON.parse(value) as unknown;
@@ -61,5 +65,6 @@ export async function loadProjectTree(projectId:string,storage:ProjectTreeStorag
 }
 
 export function clearProjectTree(projectId:string,storage:ProjectTreeStorage|null=browserStorage()){
- storage?.removeItem(projectTreeStorageKey(projectId));
+ const key=projectTreeStorageKey(projectId);
+ storage?.removeItem(key);
 }
