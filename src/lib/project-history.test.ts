@@ -11,19 +11,19 @@ test("appends and restores verified generations", async () => {
 });
 
 test("refuses restoring tampered content", async () => {
-  const snapshot = await createProjectSnapshot("generation_1234", [{ path: "index.html", content: "safe" }]);
+  const snapshot = await createProjectSnapshot("generation_1234", [{ path: "index.html", content: "<!doctype html><html><body>safe</body></html>" }]);
   const history = appendGeneration(emptyProjectHistory(), { id: "generation_1234", summary: "initial", snapshot });
   snapshot.files[0].content = "tampered";
   await assert.rejects(() => restoreGeneration(history, "generation_1234"), /integrity/);
 });
 
 test("rejects history entries whose id does not match the snapshot generation",async()=>{
- const snapshot=await createProjectSnapshot("generation_5678",[{path:"index.html",content:"safe"}]);
+ const snapshot=await createProjectSnapshot("generation_5678",[{path:"index.html",content:"<!doctype html><html><body>safe</body></html>"}]);
  assert.throws(()=>appendGeneration(emptyProjectHistory(),{id:"generation_other",summary:"mismatch",snapshot}),/does not match/);
 });
 
 test("rejects restore after persisted generation identity tampering",async()=>{
- const snapshot=await createProjectSnapshot("generation_9012",[{path:"index.html",content:"safe"}]);
+ const snapshot=await createProjectSnapshot("generation_9012",[{path:"index.html",content:"<!doctype html><html><body>safe</body></html>"}]);
  const history=appendGeneration(emptyProjectHistory(),{id:"generation_9012",summary:"initial",snapshot});
  history.generations[0].id="generation_tampered";
  await assert.rejects(()=>restoreGeneration(history,"generation_tampered"),/does not match/);
