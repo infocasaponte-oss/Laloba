@@ -15,8 +15,8 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { stripHtmlBlock } from "@/lib/html-apps";
-import { authorizeGeneration, prepareGenerationAuthorization, type PendingGenerationAuthorization } from "@/lib/generation-authorization";
-import { parseGenerationResult } from "@/lib/generation-result";
+import { authorizeGenerationV2,prepareGenerationV2Authorization,type PendingGenerationV2Authorization } from "@/lib/generation-v2-authorization";
+import { parseGenerationResultV2 } from "@/lib/generation-result-v2";
 import { parseGenerationPatch } from "@/lib/generation-patch";
 import { authorizePatch, preparePatchAuthorization, type PendingPatchAuthorization } from "@/lib/generation-patch-authorization";
 import { createGenerationId } from "@/lib/generation-id";
@@ -51,7 +51,8 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   const [tab,setTab]=useState<Tab>("preview"), [chatOpen,setChatOpen]=useState(true), [sideOpen,setSideOpen]=useState(false);
   const [historyOpen,setHistoryOpen]=useState(false), [shareOpen,setShareOpen]=useState(false), [publishOpen,setPublishOpen]=useState(false);
   const [commentsOpen,setCommentsOpen]=useState(false), [selectMode,setSelectMode]=useState(false), [streaming,setStreaming]=useState<string|null>(null);
-  const [pendingGeneration,setPendingGeneration]=useState<PendingGenerationAuthorization|null>(null);
+  const [pendingGeneration,setPendingGeneration]=useState<PendingGenerationV2Authorization|null>(null);
+  const [pendingGenerationChanges,setPendingGenerationChanges]=useState<ProjectChangeSet|null>(null);
   const [pendingPatch,setPendingPatch]=useState<PendingPatchAuthorization|null>(null);
   const [pendingPatchChanges,setPendingPatchChanges]=useState<ProjectChangeSet|null>(null);
   const currentHtml=entrypointHtml(project.tree);
@@ -82,7 +83,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
         onDelta:(chunk)=>setStreaming((value)=>(value??"")+chunk),
       });
 
-      const initialResult=mode==="build"&&buildKind==="initial"?parseGenerationResult(text):null;
+      const initialResult=mode==="build"&&buildKind==="initial"?parseGenerationResultV2(text):null;
       const patchResult=mode==="build"&&buildKind==="patch"?parseGenerationPatch(text):null;
       let visible=stripHtmlBlock(text)||text;
       let filesChanged:string[]=[];
@@ -90,8 +91,17 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
       if(initialResult){
         if(initialResult.ok){
           visible=initialResult.result.summary;
-          filesChanged=["index.html"];
-          setPendingGeneration(await prepareGenerationAuthorization(createGenerationId(),projectId,prompt,initialResult.result,currentHtml));
+          filesChanged=initialResult.result.files.map((file)=>file.path);
+          const pending=await prepareGenerationV2Authorization(
+            createGenerationId(),
+            projectId,
+            prompt,
+            initialResult.result,
+            project.tree.files,
+          );
+          const preview=await authorizeGenerationV2(pending,projectId,project.tree.files);
+          setPendingGenerationChanges(await createProjectChangeSet(project.tree.files,preview.files));
+          setPendingGeneration(pending);
         }else{
           visible=`No apliqué el resultado: ${initialResult.reason}`;
         }
@@ -119,15 +129,14 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
       setStreaming(null);
     }
   }
-  async function applyPendingGeneration(pending:PendingGenerationAuthorization) {
+  async function applyPendingGeneration(pending:PendingGenerationV2Authorization) {
     const current=useLaloba.getState().projects.find((candidate)=>candidate.id===projectId);
     if(!current)throw new Error("Project no longer exists");
-    const latestHtml=entrypointHtml(current.tree);
-    if(!latestHtml)throw new Error("Project tree is missing a valid index.html");
-    const {manifest,snapshot}=await authorizeGeneration(pending,projectId,latestHtml);
+    const {files,manifest,snapshot}=await authorizeGenerationV2(pending,projectId,current.tree.files);
     recordProjectGeneration(projectId,{id:pending.generationId,summary:pending.result.summary,snapshot});
-    console.info("laloba:generation",{generationId:pending.generationId,manifest,snapshot,authorized:true});
-    setProjectFiles(projectId,pending.generationId,snapshot.files.map(({path,content})=>({path,content})),pending.prompt.slice(0,40));
+    console.info("laloba:generation-v2",{generationId:pending.generationId,manifest,snapshot,authorized:true});
+    setProjectFiles(projectId,pending.generationId,files,pending.prompt.slice(0,40));
+    setPendingGenerationChanges(null);
   }
 
   async function applyPendingPatch(pending:PendingPatchAuthorization) {
@@ -157,7 +166,19 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   </div>
   <Sheet open={sideOpen} onOpenChange={setSideOpen}><SheetContent side="left"><div className="space-y-3 p-4"><LogoMark className="size-7"/><Link to="/">Panel</Link><Link to="/templates">Plantillas</Link><Link to="/connectors">Conectores</Link><Link to="/settings">Ajustes</Link></div></SheetContent></Sheet>
   <Dialog open={historyOpen} onOpenChange={setHistoryOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Historial</h2><div className="mt-3 space-y-2">{generationHistory?.generations.slice().reverse().map((g)=><button key={g.id} type="button" className="block w-full rounded-lg border border-border p-3 text-left" onClick={async()=>{try{const history=await restoreProjectGeneration(projectId,g.id);const current=history.generations.find((x)=>x.id===history.currentGenerationId);const html=current?.snapshot.files.find((file)=>file.path==="index.html")?.content;if(!html)throw new Error("Snapshot sin index.html");setProjectFiles(projectId,g.id,current!.snapshot.files.map(({path,content})=>({path,content})),`Restaurar ${g.summary.slice(0,30)}`);setHistoryOpen(false);toast.success("Generación restaurada y verificada")}catch{toast.error("No se pudo verificar esta generación")}}}><div className="text-sm font-medium">{g.summary}</div><div className="text-xs text-muted">{g.id}</div></button>)}{!generationHistory?.generations.length && <p className="text-sm text-muted">Todavía no hay generaciones verificadas. Las versiones antiguas se conservan en los datos del proyecto, pero ya no se restauran sin verificación de integridad.</p>}</div></DialogContent></Dialog>
-  <Dialog open={Boolean(pendingGeneration)} onOpenChange={(open)=>{if(!open)setPendingGeneration(null)}}><DialogContent><h2 className="font-display text-lg font-semibold">Autorizar cambio generado</h2><p className="text-sm text-muted">Laloba ha preparado una modificación de la app existente. El código no se aplicará hasta que la autorices.</p>{pendingGeneration&&<div className="rounded-lg border border-border p-3"><div className="text-sm font-medium">{pendingGeneration.result.summary}</div><div className="mt-1 text-xs text-muted">Archivo: index.html · El resultado ya superó el contrato y la validación de HTML.</div></div>}<div className="flex justify-end gap-2"><Button variant="ghost" onClick={()=>setPendingGeneration(null)}>Descartar</Button><Button onClick={async()=>{const pending=pendingGeneration;if(!pending)return;try{await applyPendingGeneration(pending);setPendingGeneration(null);toast.success("Cambio autorizado y aplicado")}catch{toast.error("No se pudo aplicar el cambio")}}}>Autorizar y aplicar</Button></div></DialogContent></Dialog>
+  <Dialog open={Boolean(pendingGeneration)} onOpenChange={(open)=>{if(!open){setPendingGeneration(null);setPendingGenerationChanges(null)}}}><DialogContent>
+    <h2 className="font-display text-lg font-semibold">Autorizar generación inicial</h2>
+    <p className="text-sm text-muted">Laloba ha preparado un proyecto multiarchivo validado. El árbol actual se volverá a comprobar justo antes de aplicar la generación.</p>
+    {pendingGeneration&&<div className="mt-3 space-y-2">
+      <div className="text-sm font-medium">{pendingGeneration.result.summary}</div>
+      {(pendingGenerationChanges?.changes ?? []).map((change)=><div key={change.path} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+        <code className="min-w-0 truncate text-xs">{change.path}</code>
+        <div className="flex shrink-0 items-center gap-2"><span className="text-[11px] tabular-nums text-muted">{"bytes" in change?`${change.bytes} B`:""}</span><span className="rounded-full bg-elevated px-2 py-1 text-[11px] uppercase text-muted">{change.op}</span></div>
+      </div>)}
+      {pendingGenerationChanges&&<div className="pt-1 font-mono text-[10px] text-subtle">base {pendingGenerationChanges.baseTreeSha256.slice(0,12)} → next {pendingGenerationChanges.nextTreeSha256.slice(0,12)}</div>}
+    </div>}
+    <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={()=>{setPendingGeneration(null);setPendingGenerationChanges(null)}}>Descartar</Button><Button onClick={async()=>{const pending=pendingGeneration;if(!pending)return;try{await applyPendingGeneration(pending);setPendingGeneration(null);setPendingGenerationChanges(null);toast.success("Generación autorizada y aplicada")}catch(error){toast.error(error instanceof Error?error.message:"No se pudo aplicar la generación")}}}>Autorizar y aplicar</Button></div>
+  </DialogContent></Dialog>
   <Dialog open={Boolean(pendingPatch)} onOpenChange={(open)=>{if(!open){setPendingPatch(null);setPendingPatchChanges(null)}}}><DialogContent>
     <h2 className="font-display text-lg font-semibold">Autorizar patch generado</h2>
     <p className="text-sm text-muted">Laloba propone operaciones sobre el árbol exacto que estaba activo al generar este cambio. Si el proyecto cambió entretanto, la autorización fallará.</p>
