@@ -1,3 +1,5 @@
+import type { ProjectTree } from "./project-tree";
+
 export type Mode = "build" | "plan";
 
 export type ChatMessage = {
@@ -47,8 +49,12 @@ export type Project = {
   id: string;
   name: string;
   description: string;
+  /** Compatibility projection. ProjectTree is the source of truth. */
   html: string;
+  /** Compatibility projection. ProjectTree is the source of truth. */
   files: ProjectFile[];
+  tree: ProjectTree;
+  currentGenerationId: string;
   messages: ChatMessage[];
   versions: Version[];
   drafts: Draft[];
