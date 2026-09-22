@@ -16,6 +16,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { stripHtmlBlock } from "@/lib/html-apps";
 import { parseGenerationResult } from "@/lib/generation-result";
+import type { GenerationResult } from "@/lib/generation-result";
 import { createGenerationManifest } from "@/lib/generation-manifest";
 import { createGenerationId } from "@/lib/generation-id";
 import { createProjectSnapshot } from "@/lib/project-files";
@@ -48,6 +49,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   const [tab,setTab]=useState<Tab>("preview"), [chatOpen,setChatOpen]=useState(true), [sideOpen,setSideOpen]=useState(false);
   const [historyOpen,setHistoryOpen]=useState(false), [shareOpen,setShareOpen]=useState(false), [publishOpen,setPublishOpen]=useState(false);
   const [commentsOpen,setCommentsOpen]=useState(false), [selectMode,setSelectMode]=useState(false), [streaming,setStreaming]=useState<string|null>(null);
+  const [pendingGeneration,setPendingGeneration]=useState<{result:GenerationResult;prompt:string}|null>(null);
   const busy=streaming!==null, started=useRef(false);
   const generationHistory = historyOpen ? loadProjectHistory(projectId) : null;
 
@@ -65,23 +67,29 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
         : structured && !structured.ok && !legacyHtml
           ? `No apliqué el resultado: ${structured.reason}`
           : stripHtmlBlock(text) || (html ? "Listo. Revisé la vista previa." : text);
-      if(html&&mode==="build") {
-        if (structured?.ok) {
-          const generationId = createGenerationId();
-          const [manifest, snapshot] = await Promise.all([
-            createGenerationManifest(structured.result),
-            createProjectSnapshot(generationId, structured.result.files),
-          ]);
-          recordProjectGeneration(projectId, { id: generationId, summary: structured.result.summary, snapshot });
-          console.info("laloba:generation", { generationId, manifest, snapshot });
+      if(html&&mode==="build"&&structured?.ok) {
+        if(project.html.trim()){
+          setPendingGeneration({result:structured.result,prompt});
+        }else{
+          await applyAuthorizedGeneration(structured.result,prompt);
         }
-        setHtml(projectId,html,prompt.slice(0,40));
       }
       const credits=mode==="plan"?0.4:1.1; spendCredits(credits);
       appendMessage(projectId,{id:uid("m"),role:"assistant",content:visible,mode,createdAt:Date.now(),credits,durationMs:Date.now()-t0,filesChanged:html?["index.html"]:[]});
     } catch(err) { appendMessage(projectId,{id:uid("m"),role:"assistant",content:err instanceof Error?err.message:"No se pudo completar",mode,createdAt:Date.now()}); }
     finally { setStreaming(null); }
   }
+  async function applyAuthorizedGeneration(result:GenerationResult,prompt:string) {
+    const generationId=createGenerationId();
+    const [manifest,snapshot]=await Promise.all([
+      createGenerationManifest(result),
+      createProjectSnapshot(generationId,result.files),
+    ]);
+    recordProjectGeneration(projectId,{id:generationId,summary:result.summary,snapshot});
+    console.info("laloba:generation",{generationId,manifest,snapshot,authorized:true});
+    setHtml(projectId,result.files[0].content,prompt.slice(0,40));
+  }
+
   useEffect(()=>{if(!autostart||started.current)return;const last=project.messages.at(-1);if(last?.role==="user"&&project.messages.filter((m)=>m.role==="assistant").length===0){started.current=true;void run(last.content,last.mode)}},[autostart]);
   const tabs:{id:Tab;label:string}[]=[{id:"preview",label:"Vista previa"},{id:"files",label:"Archivos"},{id:"code",label:"Código"},{id:"more",label:"Más"}];
 
@@ -99,6 +107,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   </div>
   <Sheet open={sideOpen} onOpenChange={setSideOpen}><SheetContent side="left"><div className="space-y-3 p-4"><LogoMark className="size-7"/><Link to="/">Panel</Link><Link to="/templates">Plantillas</Link><Link to="/connectors">Conectores</Link><Link to="/settings">Ajustes</Link></div></SheetContent></Sheet>
   <Dialog open={historyOpen} onOpenChange={setHistoryOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Historial</h2><div className="mt-3 space-y-2">{generationHistory?.generations.slice().reverse().map((g)=><button key={g.id} type="button" className="block w-full rounded-lg border border-border p-3 text-left" onClick={async()=>{try{const history=await restoreProjectGeneration(projectId,g.id);const current=history.generations.find((x)=>x.id===history.currentGenerationId);const html=current?.snapshot.files.find((file)=>file.path==="index.html")?.content;if(!html)throw new Error("Snapshot sin index.html");setHtml(projectId,html,`Restaurar ${g.summary.slice(0,30)}`);setHistoryOpen(false);toast.success("Generación restaurada y verificada")}catch{toast.error("No se pudo verificar esta generación")}}}><div className="text-sm font-medium">{g.summary}</div><div className="text-xs text-muted">{g.id}</div></button>)}{!generationHistory?.generations.length && <p className="text-sm text-muted">Todavía no hay generaciones verificadas. Las versiones antiguas se conservan en los datos del proyecto, pero ya no se restauran sin verificación de integridad.</p>}</div></DialogContent></Dialog>
+  <Dialog open={Boolean(pendingGeneration)} onOpenChange={(open)=>{if(!open)setPendingGeneration(null)}}><DialogContent><h2 className="font-display text-lg font-semibold">Autorizar cambio generado</h2><p className="text-sm text-muted">Laloba ha preparado una modificación de la app existente. El código no se aplicará hasta que la autorices.</p>{pendingGeneration&&<div className="rounded-lg border border-border p-3"><div className="text-sm font-medium">{pendingGeneration.result.summary}</div><div className="mt-1 text-xs text-muted">Archivo: index.html · El resultado ya superó el contrato y la validación de HTML.</div></div>}<div className="flex justify-end gap-2"><Button variant="ghost" onClick={()=>setPendingGeneration(null)}>Descartar</Button><Button onClick={async()=>{const pending=pendingGeneration;if(!pending)return;try{await applyAuthorizedGeneration(pending.result,pending.prompt);setPendingGeneration(null);toast.success("Cambio autorizado y aplicado")}catch{toast.error("No se pudo aplicar el cambio")}}}>Autorizar y aplicar</Button></div></DialogContent></Dialog>
   <Dialog open={shareOpen} onOpenChange={setShareOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Compartir</h2><Input readOnly value={typeof window!=="undefined"?window.location.href:""}/></DialogContent></Dialog>
   <Dialog open={publishOpen} onOpenChange={setPublishOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Publicar</h2><p className="text-sm text-muted">La publicación será una operación separada y autorizada. El preview no concede credenciales de despliegue.</p><Button onClick={()=>setPublishOpen(false)}>Entendido</Button></DialogContent></Dialog>
   <Dialog open={commentsOpen} onOpenChange={setCommentsOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Comentarios</h2><Textarea id="new-comment" placeholder="Añade un comentario"/><Button onClick={()=>{const el=document.getElementById("new-comment") as HTMLTextAreaElement|null;if(el?.value.trim()){addComment(project.id,el.value.trim());setCommentsOpen(false)}}}>Añadir</Button></DialogContent></Dialog>
