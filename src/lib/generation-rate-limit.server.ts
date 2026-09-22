@@ -4,6 +4,8 @@ const CAPACITY=8;
 const REFILL_PER_MS=CAPACITY/(60*60*1000);
 const MAX_BUCKETS=10_000;
 
+export const generationRateLimitPolicy={capacity:CAPACITY,windowMs:60*60*1000,maxBuckets:MAX_BUCKETS} as const;
+
 function prune(now:number){
   if(buckets.size<MAX_BUCKETS)return;
 
@@ -39,3 +41,6 @@ export function consumeGenerationQuota(userId:string,now=Date.now()):RateLimitRe
   buckets.set(userId,{tokens:remaining,updatedAt:now});
   return{allowed:true,remaining:Math.floor(remaining)};
 }
+
+export function generationRateLimitSizeForTest(){return buckets.size;}
+export function resetGenerationRateLimitForTest(){buckets.clear();}
