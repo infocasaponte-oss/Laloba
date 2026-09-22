@@ -26,3 +26,16 @@ test("enforces aggregate generation size",()=>{
  const files=Array.from({length:5},(_,i)=>({path:`src/file-${i}.txt`,content}));
  assert.equal(parseGenerationResultV2(JSON.stringify({schemaVersion:"2",summary:"x",files})).ok,false);
 });
+
+test("requires a safe executable entrypoint",()=>{
+ assert.equal(parseGenerationResultV2(JSON.stringify({schemaVersion:"2",summary:"x",files:[{path:"src/app.ts",content:"export default 1"}]})).ok,false);
+ assert.equal(parseGenerationResultV2(JSON.stringify({schemaVersion:"2",summary:"x",files:[{path:"index.html",content:"<!doctype html><html><iframe></iframe></html>"}]})).ok,false);
+});
+
+test("enforces per-file byte limits for multibyte generated files",()=>{
+ const files=[
+  {path:"index.html",content:"<!doctype html><html></html>"},
+  {path:"src/data.txt",content:"€".repeat(200_000)},
+ ];
+ assert.equal(parseGenerationResultV2(JSON.stringify({schemaVersion:"2",summary:"x",files})).ok,false);
+});
