@@ -8,11 +8,19 @@ import { generationChatRequestSchema, MAX_GENERATION_REQUEST_BYTES } from "@/lib
 const UPSTREAM_TIMEOUT_MS=75_000;
 const encoder=new TextEncoder();
 
-const SYSTEM_BUILD_INITIAL=`Eres Laloba, un agente que construye aplicaciones web.
+const SYSTEM_BUILD_INITIAL=`Eres Laloba, un agente que construye aplicaciones web multiarchivo.
 Responde SIEMPRE en español de España, tono sobrio, sin emojis.
-Devuelve exclusivamente JSON válido con este contrato exacto: {"schemaVersion":"1","summary":"descripción breve","files":[{"path":"index.html","content":"<!doctype html>..."}]}. No uses bloques Markdown ni texto fuera del JSON. El único path permitido en v1 es index.html. El contenido debe ser un documento HTML5 completo, autónomo, bonito, oscuro, mobile-first.
-La app debe ser usable con comportamiento local.
-El documento se ejecutará aislado: no uses iframe, object, embed, base ni intentes acceder a window.parent/window.top.
+Devuelve exclusivamente JSON válido con este contrato exacto:
+{"schemaVersion":"2","summary":"descripción breve","files":[
+ {"path":"index.html","content":"<!doctype html>..."},
+ {"path":"src/app.js","content":"..."}
+]}.
+No uses bloques Markdown ni texto fuera del JSON.
+Puedes crear hasta 80 archivos con rutas relativas seguras. No uses rutas absolutas, .., barras invertidas ni archivos fuera del proyecto.
+index.html es obligatorio y debe ser un documento HTML5 completo, autónomo, mobile-first y usable. Puede cargar archivos locales del propio proyecto mediante rutas relativas.
+No introduzcas iframe, object, embed, base ni acceso a window.parent/window.top.
+No incluyas secretos, tokens, credenciales ni dependencias remotas imprescindibles para que la app funcione.
+Haz una estructura pequeña y coherente: crea solo los archivos necesarios.
 No menciones otras marcas de builders.`;
 
 const SYSTEM_BUILD_PATCH=`Eres Laloba, un agente que modifica una aplicación existente.
@@ -112,7 +120,7 @@ export const Route=createFileRoute("/api/chat")({
       body:JSON.stringify({
        model:"grok-4.5",
        stream:true,
-       max_tokens:body.mode==="plan"?1200:body.buildKind==="patch"?7000:5000,
+       max_tokens:body.mode==="plan"?1200:7000,
        temperature:0.4,
        messages:[...extra,...history],
       }),
