@@ -2,6 +2,8 @@
 
 Updated: 2026-09-22
 
+> For the expanded September 2026 feature-by-feature comparison against the current Lovable platform, see [LOVABLE-PARITY-AUDIT-2026.md](./LOVABLE-PARITY-AUDIT-2026.md).
+
 ## Target
 
 Laloba should be a professional AI application engineering platform, not only an HTML generator. The product loop is:
