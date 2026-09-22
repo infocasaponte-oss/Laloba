@@ -48,3 +48,17 @@ test("rejects malformed generation ids before preparing approval",async()=>{
 test("rejects invalid project ids before preparing approval",async()=>{
  await assert.rejects(()=>prepareGenerationAuthorization("generation_123461","../project","fix it",result,"<html>old</html>"),/Invalid project id/);
 });
+
+test("rejects mutation of approval metadata after preparation",async()=>{
+ const now=new Date("2026-01-01T00:00:00.000Z");
+ const pending=await prepareGenerationAuthorization("generation_123462","project-a","fix it",structuredClone(result),"<html>old</html>",now);
+ pending.preparedAt="2026-01-01T00:05:00.000Z";
+ await assert.rejects(()=>authorizeGeneration(pending,"project-a","<html>old</html>",now),/envelope changed/);
+});
+
+test("rejects rebinding a prepared approval to another valid project",async()=>{
+ const now=new Date("2026-01-01T00:00:00.000Z");
+ const pending=await prepareGenerationAuthorization("generation_123463","project-a","fix it",structuredClone(result),"<html>old</html>",now);
+ pending.projectId="project-b";
+ await assert.rejects(()=>authorizeGeneration(pending,"project-b","<html>old</html>",now),/envelope changed/);
+});
