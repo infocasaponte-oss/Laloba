@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { validateGeneratedHtml } from "./generated-html";
+import { sha256 } from "./project-files";
 
 const generatedFileSchema = z.object({
   path: z.literal("index.html"),
@@ -13,6 +14,18 @@ export const generationResultSchema = z.object({
 }).strict();
 
 export type GenerationResult = z.infer<typeof generationResultSchema>;
+
+
+export async function generationResultSha256(result:GenerationResult){
+ const parsed=generationResultSchema.safeParse(result);
+ if(!parsed.success)throw new Error("Invalid generation result");
+ const canonical={
+  schemaVersion:"1" as const,
+  summary:parsed.data.summary,
+  files:[{path:"index.html" as const,content:parsed.data.files[0].content}],
+ };
+ return sha256(JSON.stringify(canonical));
+}
 
 export function parseGenerationResult(text: string):
   | { ok: true; result: GenerationResult }
