@@ -34,3 +34,19 @@ test("prefers a configured canonical public origin",()=>withEnv({APP_ORIGIN:"htt
 test("allows requests without Origin for non-browser clients",()=>{
   assert.equal(isTrustedMutationOrigin(new Request("https://laloba.example/api/chat",{method:"POST"})),true);
 });
+
+
+test("rejects cross-site fetch metadata even without Origin",()=>{
+ const request=new Request("https://app.example.com/api/chat",{method:"POST",headers:{"Sec-Fetch-Site":"cross-site"}});
+ assert.equal(isTrustedMutationOrigin(request),false);
+});
+
+test("allows same-origin and server-to-server fetch metadata",()=>{
+ assert.equal(isTrustedMutationOrigin(new Request("https://app.example.com/api/chat",{method:"POST",headers:{"Sec-Fetch-Site":"same-origin"}})),true);
+ assert.equal(isTrustedMutationOrigin(new Request("https://app.example.com/api/chat",{method:"POST",headers:{"Sec-Fetch-Site":"none"}})),true);
+});
+
+test("rejects unknown fetch metadata values fail-closed",()=>{
+ const request=new Request("https://app.example.com/api/chat",{method:"POST",headers:{"Sec-Fetch-Site":"unexpected"}});
+ assert.equal(isTrustedMutationOrigin(request),false);
+});
