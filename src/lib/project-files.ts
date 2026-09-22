@@ -4,7 +4,7 @@ import { assertGenerationId, isValidGenerationId } from "./generation-id";
 
 export const projectFileSchema=z.object({path:z.string().min(1).max(180),content:z.string().max(512_000),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 export type ProjectFile=z.infer<typeof projectFileSchema>;
-export type ProjectSnapshot={schemaVersion:"1";generationId:string;createdAt:string;files:ProjectFile[];treeSha256?:string};
+export type ProjectSnapshot={schemaVersion:"1";generationId:string;createdAt:string;files:ProjectFile[];treeSha256:string};
 const encoder=new TextEncoder();
 const hex=(b:ArrayBuffer)=>Array.from(new Uint8Array(b),x=>x.toString(16).padStart(2,"0")).join("");
 export async function sha256(content:string){return hex(await crypto.subtle.digest("SHA-256",encoder.encode(content)))}
@@ -39,6 +39,7 @@ export async function verifyProjectSnapshot(snapshot:ProjectSnapshot){
   const path=validateGeneratedPath(file.path);if(!path.ok||seen.has(path.path))return false;seen.add(path.path);
   if(await sha256(file.content)!==file.sha256)return false;
  }
- if(snapshot.treeSha256&&await projectTreeSha256(snapshot.files)!==snapshot.treeSha256)return false;
+ if(!/^[a-f0-9]{64}$/.test(snapshot.treeSha256))return false;
+ if(await projectTreeSha256(snapshot.files)!==snapshot.treeSha256)return false;
  return true;
 }
