@@ -20,6 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Runner diagnostics
         shell: bash
         run: |
@@ -29,6 +33,9 @@ jobs:
           echo "sha=${GITHUB_SHA}"
           echo "ref=${GITHUB_REF}"
 
+      - name: Verify canonical repository
+        run: npm run check:runtime-source
+
       - name: Reject committed environment files
         shell: bash
         run: |
@@ -36,15 +43,18 @@ jobs:
           bad="$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '(^|/)\.env\.example$' || true)"
           test -z "$bad" || { echo "Environment files must not be committed:"; echo "$bad"; exit 1; }
 
-      - name: Verify normalized repository layout
+      - name: Basic committed secret guard
         shell: bash
         run: |
           set -euo pipefail
-          test -f package-lock.json
-          test ! -e .laloba-transfer
-          test ! -e .canonical-source
-          test ! -e scripts/restore-source.sh
-          test ! -e scripts/restore-canonical-lockfile.mjs
+          key_hits="$(git grep -nE -- '-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----' -- . ':!package-lock.json' || true)"
+          token_hits="$(git grep -nE -- '(github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16})' -- . ':!package-lock.json' || true)"
+          test -z "$key_hits$token_hits" || {
+            echo "Potential committed secret material detected."
+            [ -z "$key_hits" ] || echo "$key_hits"
+            [ -z "$token_hits" ] || echo "$token_hits"
+            exit 1
+          }
 
   application:
     runs-on: ubuntu-latest
@@ -52,16 +62,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify canonical runtime source
-        run: node scripts/check-runtime-source.mjs
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
+      - name: Verify canonical repository
+        run: npm run check:runtime-source
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Dependency vulnerability audit
+        run: npm run audit:dependencies
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
 
       - name: Typecheck
         run: npm run typecheck
