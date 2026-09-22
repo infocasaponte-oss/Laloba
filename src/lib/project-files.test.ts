@@ -34,3 +34,10 @@ test("canonical tree digest binds paths as well as content",async()=>{
  const renamed=await projectTreeSha256([{path:"src/b.ts",content:"same"}]);
  assert.notEqual(original,renamed);
 });
+
+test("rejects snapshots that omit the authenticated tree digest",async()=>{
+ const snapshot=await createProjectSnapshot("generation_7777",[{path:"index.html",content:"<!doctype html><html></html>"}]);
+ const legacy={...snapshot} as Partial<typeof snapshot>;
+ delete legacy.treeSha256;
+ assert.equal(await verifyProjectSnapshot(legacy as typeof snapshot),false);
+});
