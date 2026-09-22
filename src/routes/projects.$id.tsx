@@ -19,7 +19,6 @@ import { authorizeGeneration, prepareGenerationAuthorization, type PendingGenera
 import { parseGenerationResult } from "@/lib/generation-result";
 import { parseGenerationPatch } from "@/lib/generation-patch";
 import { authorizePatch, preparePatchAuthorization, type PendingPatchAuthorization } from "@/lib/generation-patch-authorization";
-import type { GenerationResult } from "@/lib/generation-result";
 import { createGenerationId } from "@/lib/generation-id";
 import { loadProjectHistory, recordProjectGeneration, restoreProjectGeneration } from "@/lib/project-history-store";
 import { entrypointHtml } from "@/lib/project-tree";
@@ -115,14 +114,6 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
       setStreaming(null);
     }
   }
-  async function applyAuthorizedGeneration(result:GenerationResult,prompt:string) {
-    const pending=await prepareGenerationAuthorization(createGenerationId(),projectId,prompt,result,currentHtml);
-    const {manifest,snapshot}=await authorizeGeneration(pending,projectId,currentHtml);
-    recordProjectGeneration(projectId,{id:pending.generationId,summary:result.summary,snapshot});
-    console.info("laloba:generation",{generationId:pending.generationId,manifest,snapshot,authorized:true});
-    setProjectFiles(projectId,pending.generationId,snapshot.files.map(({path,content})=>({path,content})),prompt.slice(0,40));
-  }
-
   async function applyPendingGeneration(pending:PendingGenerationAuthorization) {
     const current=useLaloba.getState().projects.find((candidate)=>candidate.id===projectId);
     if(!current)throw new Error("Project no longer exists");
