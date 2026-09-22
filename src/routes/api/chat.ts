@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { requireUserId, UnauthorizedError } from "@/lib/auth/verify.server";
 import { consumeGenerationQuota } from "@/lib/generation-rate-limit.server";
+import { isTrustedMutationOrigin } from "@/lib/auth/request-origin.server";
 
 const MAX_REQUEST_BYTES = 96_000;
 const UPSTREAM_TIMEOUT_MS = 75_000;
@@ -37,6 +38,8 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        if (!isTrustedMutationOrigin(request)) return jsonError("Forbidden origin", 403);
+
         let userId: string;
         try {
           userId = await requireUserId();
