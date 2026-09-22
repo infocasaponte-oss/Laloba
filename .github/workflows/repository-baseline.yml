@@ -48,6 +48,14 @@ jobs:
       - name: Typecheck
         if: steps.app.outputs.present == 'true'
         run: npm run typecheck
+      - name: Generator security suite
+        if: steps.app.outputs.present == 'true'
+        run: npm run test:generator
+
       - name: Test
         if: steps.app.outputs.present == 'true'
         run: npm test
+
+      - name: Build development bundle
+        if: steps.app.outputs.present == 'true'
+        run: npm run build:dev
