@@ -17,6 +17,8 @@ import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { extractHtml, stripHtmlBlock } from "@/lib/html-apps";
 import { parseGenerationResult } from "@/lib/generation-result";
 import { createGenerationManifest } from "@/lib/generation-manifest";
+import { createGenerationId } from "@/lib/generation-id";
+import { createProjectSnapshot } from "@/lib/project-files";
 import { streamChat } from "@/lib/stream-chat";
 import { useHasHydrated, useLaloba } from "@/lib/store";
 import type { Mode } from "@/lib/types";
@@ -63,8 +65,12 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
           : stripHtmlBlock(text) || (html ? "Listo. Revisé la vista previa." : text);
       if(html&&mode==="build") {
         if (structured?.ok) {
-          const manifest = await createGenerationManifest(structured.result);
-          console.info("laloba:generation-manifest", manifest);
+          const generationId = createGenerationId();
+          const [manifest, snapshot] = await Promise.all([
+            createGenerationManifest(structured.result),
+            createProjectSnapshot(generationId, structured.result.files),
+          ]);
+          console.info("laloba:generation", { generationId, manifest, snapshot });
         }
         setHtml(projectId,html,prompt.slice(0,40));
       }
