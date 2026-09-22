@@ -1,0 +1,32 @@
+name: Repository baseline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject committed environment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          bad="$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '(^|/)\.env\.example$' || true)"
+          if [[ -n "$bad" ]]; then
+            echo "Environment files must not be committed:"
+            echo "$bad"
+            exit 1
+          fi
+      - name: Validate transfer payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          if compgen -G '.laloba-transfer/*.b64' > /dev/null; then
+            ./scripts/restore-source.sh "$RUNNER_TEMP/laloba-restored"
+          fi
