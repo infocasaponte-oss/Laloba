@@ -3,6 +3,9 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { CONNECTORS, INBOX_SEED, NEWS_SEED, TEMPLATES } from "@/lib/catalog";
 import { demoHtml } from "@/lib/html-apps";
+import { createGenerationId } from "@/lib/generation-id";
+import { entrypointHtml, projectTreeFromGeneration, replaceProjectTreeGeneration } from "@/lib/project-tree";
+import type { ProjectSourceFile } from "@/lib/generation-patch";
 import type {
   ApiKey,
   AppState,
@@ -16,15 +19,29 @@ import { slugify, uid } from "@/lib/utils";
 
 const now = Date.now();
 
+function legacyGenerationId(projectId:string){
+  const safe=projectId.replace(/[^A-Za-z0-9_-]/g,"_").slice(0,48) || "project";
+  return `generation_legacy_${safe}`;
+}
+
 function makeProject(partial: Partial<Project> & Pick<Project, "name" | "html">): Project {
   const id = partial.id ?? uid("p");
   const createdAt = partial.createdAt ?? now;
+  const sourceFiles=partial.tree?.files ?? partial.files ?? [{path:"index.html",content:partial.html}];
+  const generationId=partial.tree?.generationId ?? partial.currentGenerationId ?? legacyGenerationId(id);
+  const tree=partial.tree
+    ? replaceProjectTreeGeneration(partial.tree,generationId,sourceFiles)
+    : projectTreeFromGeneration(generationId,{schemaVersion:"2",summary:"Legacy project migration",files:sourceFiles});
+  const html=entrypointHtml(tree);
+  if(!html)throw new Error("Project tree is missing index.html");
   return {
     id,
     name: partial.name,
     description: partial.description ?? "",
-    html: partial.html,
-    files: partial.files ?? [{ path: "index.html", content: partial.html }],
+    html,
+    files: tree.files.map((file)=>({...file})),
+    tree,
+    currentGenerationId: tree.generationId,
     messages: partial.messages ?? [],
     versions: partial.versions ?? [
       { id: uid("v"), createdAt, label: "Versión inicial", html: partial.html },
@@ -131,6 +148,7 @@ type Actions = {
   addFolder: (name: string) => Folder;
   appendMessage: (projectId: string, msg: Project["messages"][number]) => void;
   setHtml: (projectId: string, html: string, label?: string) => void;
+  setProjectFiles: (projectId: string, generationId: string, files: ProjectSourceFile[], label?: string) => void;
   addDraft: (projectId: string, name: string) => Draft;
   applyDraft: (projectId: string, draftId: string) => void;
   deleteDraft: (projectId: string, draftId: string) => void;
@@ -207,12 +225,16 @@ h1{font-family:Syne,sans-serif;letter-spacing:-.03em}</style></head>
         set({ projects: [project, ...get().projects] });
         return project;
       },
-      updateProject: (id, patch) =>
+      updateProject: (id, patch) => {
+        if ("html" in patch || "files" in patch || "tree" in patch || "currentGenerationId" in patch) {
+          throw new Error("Source mutations must use setHtml or setProjectFiles");
+        }
         set({
           projects: get().projects.map((p) =>
             p.id === id ? { ...p, ...patch, updatedAt: Date.now() } : p,
           ),
-        }),
+        });
+      },
       deleteProject: (id) => set({ projects: get().projects.filter((p) => p.id !== id) }),
       remixProject: (id) => {
         const src = get().projects.find((p) => p.id === id);
@@ -248,24 +270,33 @@ h1{font-family:Syne,sans-serif;letter-spacing:-.03em}</style></head>
               : p,
           ),
         }),
-      setHtml: (projectId, html, label) =>
+      setHtml: (projectId, html, label) => {
+        const project=get().projects.find((p)=>p.id===projectId);
+        if(!project)throw new Error("Proyecto no encontrado");
+        const files=project.tree.files.map((file)=>file.path==="index.html"?{...file,content:html}:file);
+        get().setProjectFiles(projectId,createGenerationId(),files,label);
+      },
+      setProjectFiles: (projectId, generationId, files, label) =>
         set({
           projects: get().projects.map((p) => {
             if (p.id !== projectId) return p;
-            const version = {
-              id: uid("v"),
-              createdAt: Date.now(),
-              label: label ?? `Cambio ${p.versions.length + 1}`,
+            const tree=replaceProjectTreeGeneration(p.tree,generationId,files);
+            const html=entrypointHtml(tree);
+            if(!html)throw new Error("Project tree is missing index.html");
+            const version={
+              id:uid("v"),
+              createdAt:Date.now(),
+              label:label ?? `Cambio ${p.versions.length+1}`,
               html,
             };
             return {
               ...p,
+              tree,
+              currentGenerationId:tree.generationId,
               html,
-              files: p.files.some((f) => f.path === "index.html")
-                ? p.files.map((f) => (f.path === "index.html" ? { ...f, content: html } : f))
-                : [{ path: "index.html", content: html }, ...p.files],
-              versions: [...p.versions, version],
-              updatedAt: Date.now(),
+              files:tree.files.map((file)=>({...file})),
+              versions:[...p.versions,version],
+              updatedAt:Date.now(),
             };
           }),
         }),
@@ -331,7 +362,21 @@ h1{font-family:Syne,sans-serif;letter-spacing:-.03em}</style></head>
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       resetWorkspace: () => set({ ...initial, hasOnboarded: true }),
     }),
-    { name: "laloba-v1" },
+    {
+      name:"laloba-v1",
+      version:2,
+      migrate:(persisted)=>{
+        const state=persisted as Partial<AppState>;
+        return {
+          ...state,
+          projects:(state.projects ?? []).map((project)=>makeProject({
+            ...project,
+            name:project.name,
+            html:project.html,
+          })),
+        };
+      },
+    },
   ),
 );
 
