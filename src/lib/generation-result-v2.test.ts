@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseGenerationResultV2 } from "./generation-result-v2.ts";
+import { generationResultV2Sha256,parseGenerationResultV2 } from "./generation-result-v2.ts";
 
 test("parses a strict multi-file generation result",()=>{
  const parsed=parseGenerationResultV2(JSON.stringify({
@@ -38,4 +38,16 @@ test("enforces per-file byte limits for multibyte generated files",()=>{
   {path:"src/data.txt",content:"€".repeat(200_000)},
  ];
  assert.equal(parseGenerationResultV2(JSON.stringify({schemaVersion:"2",summary:"x",files})).ok,false);
+});
+
+
+test("v2 fingerprint is deterministic across file ordering and binds content",async()=>{
+ const a={schemaVersion:"2" as const,summary:"app",files:[
+  {path:"src/app.ts",content:"export default 1"},
+  {path:"index.html",content:"<!doctype html><html><body>a</body></html>"},
+ ]};
+ const b={...a,files:[...a.files].reverse()};
+ assert.equal(await generationResultV2Sha256(a),await generationResultV2Sha256(b));
+ const changed={...a,files:a.files.map((file)=>file.path==="src/app.ts"?{...file,content:"export default 2"}:file)};
+ assert.notEqual(await generationResultV2Sha256(a),await generationResultV2Sha256(changed));
 });
