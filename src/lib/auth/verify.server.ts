@@ -1,5 +1,5 @@
 import { getRequest } from "@tanstack/react-start/server";
-import { gateIdentityEnabled } from "./gate-identity.server";
+import { gateIdentityEnabled, verifyGateIdentity } from "./gate-identity.server";
 import { auth, authConfigured } from "./server";
 const databaseConfigured=Boolean(process.env.DATABASE_URL?.trim());
 export { authConfigured };
@@ -9,7 +9,16 @@ export type VerifiedUser={id:string;email:string|null};
 export async function getSessionUser(bearerToken?:string):Promise<VerifiedUser|null>{
   if(!authConfigured&&!gateIdentityEnabled())return null;
   const request=getRequest();if(!request)return null;
-  let headers=request.headers;if(bearerToken){headers=new Headers(request.headers);headers.set("Authorization",`Bearer ${bearerToken}`)}
+
+  const authorization=bearerToken ? `Bearer ${bearerToken}` : request.headers.get("authorization");
+  if(gateIdentityEnabled()&&authorization?.startsWith("Bearer ")){
+    const identity=await verifyGateIdentity(authorization.slice(7).trim());
+    if(identity)return{id:identity.subject,email:identity.email};
+  }
+
+  if(!authConfigured)return null;
+  const headers=new Headers(request.headers);
+  if(bearerToken)headers.set("Authorization",`Bearer ${bearerToken}`);
   const session=await auth.api.getSession({headers});if(!session?.user)return null;
   return{id:session.user.id,email:session.user.email??null};
 }
