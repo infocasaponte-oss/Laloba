@@ -22,6 +22,7 @@ import { authorizePatch, preparePatchAuthorization, type PendingPatchAuthorizati
 import { createGenerationId } from "@/lib/generation-id";
 import { loadProjectHistory, recordProjectGeneration, restoreProjectGeneration } from "@/lib/project-history-store";
 import { entrypointHtml } from "@/lib/project-tree";
+import { createProjectChangeSet, type ProjectChangeSet } from "@/lib/project-change-set";
 import { streamChat } from "@/lib/stream-chat";
 import { useHasHydrated, useLaloba } from "@/lib/store";
 import type { Mode } from "@/lib/types";
@@ -52,6 +53,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   const [commentsOpen,setCommentsOpen]=useState(false), [selectMode,setSelectMode]=useState(false), [streaming,setStreaming]=useState<string|null>(null);
   const [pendingGeneration,setPendingGeneration]=useState<PendingGenerationAuthorization|null>(null);
   const [pendingPatch,setPendingPatch]=useState<PendingPatchAuthorization|null>(null);
+  const [pendingPatchChanges,setPendingPatchChanges]=useState<ProjectChangeSet|null>(null);
   const currentHtml=entrypointHtml(project.tree);
   if(!currentHtml)throw new Error("Project tree is missing a valid index.html");
   const busy=streaming!==null, started=useRef(false);
@@ -99,7 +101,10 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
         if(patchResult.ok){
           visible=patchResult.patch.summary;
           filesChanged=patchResult.patch.operations.map((operation)=>operation.path);
-          setPendingPatch(await preparePatchAuthorization(createGenerationId(),projectId,prompt,patchResult.patch,project.tree.files));
+          const pending=await preparePatchAuthorization(createGenerationId(),projectId,prompt,patchResult.patch,project.tree.files);
+          const preview=await authorizePatch(pending,projectId,project.tree.files);
+          setPendingPatchChanges(await createProjectChangeSet(project.tree.files,preview.files));
+          setPendingPatch(pending);
         }else{
           visible=`No apliqué el patch: ${patchResult.reason}`;
         }
@@ -132,6 +137,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
     recordProjectGeneration(projectId,{id:pending.generationId,summary:pending.patch.summary,snapshot});
     console.info("laloba:patch",{generationId:pending.generationId,manifest,snapshot,operations:pending.patch.operations,authorized:true});
     setProjectFiles(projectId,pending.generationId,files,pending.patch.summary.slice(0,40));
+    setPendingPatchChanges(null);
   }
 
   useEffect(()=>{if(!autostart||started.current)return;const last=project.messages.at(-1);if(last?.role==="user"&&project.messages.filter((m)=>m.role==="assistant").length===0){started.current=true;void run(last.content,last.mode,true)}},[autostart]);
@@ -152,17 +158,18 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   <Sheet open={sideOpen} onOpenChange={setSideOpen}><SheetContent side="left"><div className="space-y-3 p-4"><LogoMark className="size-7"/><Link to="/">Panel</Link><Link to="/templates">Plantillas</Link><Link to="/connectors">Conectores</Link><Link to="/settings">Ajustes</Link></div></SheetContent></Sheet>
   <Dialog open={historyOpen} onOpenChange={setHistoryOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Historial</h2><div className="mt-3 space-y-2">{generationHistory?.generations.slice().reverse().map((g)=><button key={g.id} type="button" className="block w-full rounded-lg border border-border p-3 text-left" onClick={async()=>{try{const history=await restoreProjectGeneration(projectId,g.id);const current=history.generations.find((x)=>x.id===history.currentGenerationId);const html=current?.snapshot.files.find((file)=>file.path==="index.html")?.content;if(!html)throw new Error("Snapshot sin index.html");setProjectFiles(projectId,g.id,current!.snapshot.files.map(({path,content})=>({path,content})),`Restaurar ${g.summary.slice(0,30)}`);setHistoryOpen(false);toast.success("Generación restaurada y verificada")}catch{toast.error("No se pudo verificar esta generación")}}}><div className="text-sm font-medium">{g.summary}</div><div className="text-xs text-muted">{g.id}</div></button>)}{!generationHistory?.generations.length && <p className="text-sm text-muted">Todavía no hay generaciones verificadas. Las versiones antiguas se conservan en los datos del proyecto, pero ya no se restauran sin verificación de integridad.</p>}</div></DialogContent></Dialog>
   <Dialog open={Boolean(pendingGeneration)} onOpenChange={(open)=>{if(!open)setPendingGeneration(null)}}><DialogContent><h2 className="font-display text-lg font-semibold">Autorizar cambio generado</h2><p className="text-sm text-muted">Laloba ha preparado una modificación de la app existente. El código no se aplicará hasta que la autorices.</p>{pendingGeneration&&<div className="rounded-lg border border-border p-3"><div className="text-sm font-medium">{pendingGeneration.result.summary}</div><div className="mt-1 text-xs text-muted">Archivo: index.html · El resultado ya superó el contrato y la validación de HTML.</div></div>}<div className="flex justify-end gap-2"><Button variant="ghost" onClick={()=>setPendingGeneration(null)}>Descartar</Button><Button onClick={async()=>{const pending=pendingGeneration;if(!pending)return;try{await applyPendingGeneration(pending);setPendingGeneration(null);toast.success("Cambio autorizado y aplicado")}catch{toast.error("No se pudo aplicar el cambio")}}}>Autorizar y aplicar</Button></div></DialogContent></Dialog>
-  <Dialog open={Boolean(pendingPatch)} onOpenChange={(open)=>{if(!open)setPendingPatch(null)}}><DialogContent>
+  <Dialog open={Boolean(pendingPatch)} onOpenChange={(open)=>{if(!open){setPendingPatch(null);setPendingPatchChanges(null)}}}><DialogContent>
     <h2 className="font-display text-lg font-semibold">Autorizar patch generado</h2>
     <p className="text-sm text-muted">Laloba propone operaciones sobre el árbol exacto que estaba activo al generar este cambio. Si el proyecto cambió entretanto, la autorización fallará.</p>
     {pendingPatch&&<div className="mt-3 space-y-2">
       <div className="text-sm font-medium">{pendingPatch.patch.summary}</div>
-      {pendingPatch.patch.operations.map((operation)=><div key={operation.path} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
-        <code className="min-w-0 truncate text-xs">{operation.path}</code>
-        <span className="shrink-0 rounded-full bg-elevated px-2 py-1 text-[11px] uppercase text-muted">{operation.op}</span>
+      {(pendingPatchChanges?.changes ?? []).map((change)=><div key={change.path} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+        <code className="min-w-0 truncate text-xs">{change.path}</code>
+        <div className="flex shrink-0 items-center gap-2"><span className="text-[11px] tabular-nums text-muted">{"bytes" in change?`${change.bytes} B`:""}</span><span className="rounded-full bg-elevated px-2 py-1 text-[11px] uppercase text-muted">{change.op}</span></div>
       </div>)}
+      {pendingPatchChanges&&<div className="pt-1 font-mono text-[10px] text-subtle">base {pendingPatchChanges.baseTreeSha256.slice(0,12)} → next {pendingPatchChanges.nextTreeSha256.slice(0,12)}</div>}
     </div>}
-    <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={()=>setPendingPatch(null)}>Descartar</Button><Button onClick={async()=>{const pending=pendingPatch;if(!pending)return;try{await applyPendingPatch(pending);setPendingPatch(null);toast.success("Patch autorizado y aplicado")}catch(error){toast.error(error instanceof Error?error.message:"No se pudo aplicar el patch")}}}>Autorizar y aplicar</Button></div>
+    <div className="mt-4 flex justify-end gap-2"><Button variant="ghost" onClick={()=>{setPendingPatch(null);setPendingPatchChanges(null)}}>Descartar</Button><Button onClick={async()=>{const pending=pendingPatch;if(!pending)return;try{await applyPendingPatch(pending);setPendingPatch(null);toast.success("Patch autorizado y aplicado")}catch(error){toast.error(error instanceof Error?error.message:"No se pudo aplicar el patch")}}}>Autorizar y aplicar</Button></div>
   </DialogContent></Dialog>
   <Dialog open={shareOpen} onOpenChange={setShareOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Compartir</h2><Input readOnly value={typeof window!=="undefined"?window.location.href:""}/></DialogContent></Dialog>
   <Dialog open={publishOpen} onOpenChange={setPublishOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Publicar</h2><p className="text-sm text-muted">La publicación será una operación separada y autorizada. El preview no concede credenciales de despliegue.</p><Button onClick={()=>setPublishOpen(false)}>Entendido</Button></DialogContent></Dialog>
