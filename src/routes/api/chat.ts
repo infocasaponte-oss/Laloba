@@ -45,7 +45,11 @@ export const Route = createFileRoute("/api/chat")({
 
         let raw: unknown;
         try {
-          raw = await request.json();
+          const text = await request.text();
+          if (new TextEncoder().encode(text).byteLength > MAX_REQUEST_BYTES) {
+            return jsonError("Request too large", 413);
+          }
+          raw = JSON.parse(text);
         } catch {
           return jsonError("Invalid JSON", 400);
         }
