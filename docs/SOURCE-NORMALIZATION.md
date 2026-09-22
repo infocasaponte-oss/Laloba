@@ -1,42 +1,47 @@
 # Source normalization
 
-The repository is being migrated from a historical transfer snapshot to normal Git source control.
+Updated: 2026-09-22
 
-## Rules
+## Status
+
+Canonical source normalization is complete on the normalization change set.
+
+The repository now treats ordinary Git files as the only application source of truth:
+
+- the runtime source tree is tracked directly;
+- the authoritative `package-lock.json` is tracked directly;
+- the lockfile is checked against its recorded SHA-256;
+- historical Base64 transfer material is removed from the normal repository tree;
+- CI no longer reconstructs source or dependencies before validation.
+
+## Permanent rules
 
 1. Canonical source files are committed as ordinary files.
-2. `package.json` and `package-lock.json` must be imported as a pair from the same snapshot.
-3. CI must use `npm ci`; lockfile regeneration is not accepted as normalization.
-4. Historical Base64 fragments are migration evidence only and are not an executable source of truth.
-5. Application checks become required only after the canonical lockfile and complete runtime source are present.
-6. Generator-security changes must be replayed as explicit diffs on top of canonical source, not by replacing unrelated application code.
+2. `package.json` and `package-lock.json` must remain compatible and reviewed together when dependency declarations change.
+3. CI uses `npm ci`; lockfile regeneration is never used as an implicit repair step.
+4. Recovery/transfer payloads are not an executable source of truth and must not return to the repository.
+5. Generator/security changes are explicit reviewable diffs.
+6. `scripts/check-runtime-source.mjs` verifies the required runtime surface and the canonical lockfile digest.
+7. New required runtime entry points must be added to the repository gate when they become architectural dependencies.
 
-## Completion gate
+## Completion evidence
 
-Normalization is complete when a clean checkout can run `npm ci`, `npm run typecheck`, `npm test`, and `npm run build:dev` without relying on the historical transfer directory.
+The canonical lockfile has:
 
+- bytes: `262769`
+- SHA-256: `fc81314ce9ca4b6be0300e35a223455005daf314253a131134bf089a5b2ba4af`
+- lockfileVersion: `3`
+- package name: `app-builder-workspace`
 
-## Canonical runtime blocker discovered during Milestone A
+The runtime gate currently requires the complete application entry surface plus the canonical package pair.
 
-The editor currently imports application modules such as `@/lib/store`, `@/lib/types`, `@/lib/html-apps`, `@/lib/stream-chat`, and `@/lib/utils`, but those canonical files are not present in the normalized Git branch. The historical transfer fragments do not provide a cryptographically authenticated ordering manifest, so reconstructing and committing guessed runtime source would create an unverifiable codebase.
+The remaining F1 requirement is executed CI proof from a real GitHub runner:
 
-Therefore the migration rule is strict:
-
-1. Do not invent replacements for missing canonical runtime modules merely to satisfy imports.
-2. Do not treat historical Base64 fragments as authoritative without an ordered manifest and checksum.
-3. Generator/security modules may be developed independently only when their dependencies are present and testable.
-4. Integration into the editor/store is blocked until the canonical runtime source is imported as ordinary files.
-5. Once imported, the first integration change must preserve the legacy `project.html` field as a compatibility projection of `ProjectTree v2`, not as the source of truth.
-
-This blocker is intentional: provenance is part of the security boundary for a system that generates and executes code.
-
-
-## Runtime recovery update — 2026-09-22
-
-A user-provided canonical workspace archive, `grok-workspace.zip`, became available in the conversation file surface after the original blocker was documented.
-
-The archive contains the previously missing runtime modules plus their dependency `src/lib/catalog.ts`, and contains the authoritative `package-lock.json`. Archive and per-file SHA-256 values are recorded in `docs/SOURCE-RECOVERY-PROVENANCE.md`.
-
-The runtime module portion of the blocker is therefore resolved on the hardening branch. The remaining source-normalization blocker is importing the authoritative lockfile byte-for-byte and then proving the complete application source/dependency graph from a clean checkout.
-
-Do not interpret presence of the six recovered runtime files alone as completion of normalization: CI/typecheck may reveal additional canonical application files that must be restored from the same archive.
+    npm run check:runtime-source
+    npm ci
+    npm run format:check
+    npm run lint
+    npm run typecheck
+    npm run test:generator
+    npm test
+    npm run build:dev
