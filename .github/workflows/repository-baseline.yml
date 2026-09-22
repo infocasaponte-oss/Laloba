@@ -36,20 +36,15 @@ jobs:
           bad="$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '(^|/)\.env\.example$' || true)"
           test -z "$bad" || { echo "Environment files must not be committed:"; echo "$bad"; exit 1; }
 
-      - name: Validate transfer fragments
+      - name: Verify normalized repository layout
         shell: bash
         run: |
           set -euo pipefail
-          for part in .laloba-transfer/*.b64; do
-            [ -e "$part" ] || continue
-            tr -d '\r\n' < "$part" | base64 --decode > /dev/null
-          done
-
-      - name: Verify canonical lockfile transfer
-        run: node scripts/restore-canonical-lockfile.mjs
-
-      - name: Remove reconstructed lockfile after verification
-        run: rm -f package-lock.json
+          test -f package-lock.json
+          test ! -e .laloba-transfer
+          test ! -e .canonical-source
+          test ! -e scripts/restore-source.sh
+          test ! -e scripts/restore-canonical-lockfile.mjs
 
   application:
     runs-on: ubuntu-latest
@@ -59,9 +54,6 @@ jobs:
 
       - name: Verify canonical runtime source
         run: node scripts/check-runtime-source.mjs
-
-      - name: Restore and verify canonical npm lockfile
-        run: node scripts/restore-canonical-lockfile.mjs
 
       - uses: actions/setup-node@v4
         with:
