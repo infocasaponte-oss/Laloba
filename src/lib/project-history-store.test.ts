@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createProjectSnapshot } from "./project-files.ts";
+import { loadProjectHistory, recordProjectGeneration, restoreProjectGeneration } from "./project-history-store.ts";
+
+class MemoryStorage {
+  private data = new Map<string,string>();
+  getItem(key:string){return this.data.get(key)??null}
+  setItem(key:string,value:string){this.data.set(key,value)}
+  removeItem(key:string){this.data.delete(key)}
+  clear(){this.data.clear()}
+  key(index:number){return [...this.data.keys()][index]??null}
+  get length(){return this.data.size}
+}
+
+test("persists and restores a verified generation", async () => {
+  Object.defineProperty(globalThis,"localStorage",{value:new MemoryStorage(),configurable:true});
+  const snapshot=await createProjectSnapshot("gen_test_1",[{path:"index.html",content:"<!doctype html><html><body>ok</body></html>"}]);
+  recordProjectGeneration("project-1",{id:"gen_test_1",summary:"Initial",snapshot});
+  assert.equal(loadProjectHistory("project-1").generations.length,1);
+  const restored=await restoreProjectGeneration("project-1","gen_test_1");
+  assert.equal(restored.currentGenerationId,"gen_test_1");
+});
+
+test("rejects tampered persisted content on restore", async () => {
+  Object.defineProperty(globalThis,"localStorage",{value:new MemoryStorage(),configurable:true});
+  const snapshot=await createProjectSnapshot("gen_test_2",[{path:"index.html",content:"<!doctype html><html><body>safe</body></html>"}]);
+  recordProjectGeneration("project-2",{id:"gen_test_2",summary:"Safe",snapshot});
+  const history=loadProjectHistory("project-2");
+  history.generations[0].snapshot.files[0].content="<!doctype html><html><body>tampered</body></html>";
+  localStorage.setItem("laloba:project-history:project-2",JSON.stringify(history));
+  await assert.rejects(()=>restoreProjectGeneration("project-2","gen_test_2"),/integrity/i);
+});
