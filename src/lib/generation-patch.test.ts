@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyGenerationPatch, parseGenerationPatch } from "./generation-patch.ts";
+import { applyGenerationPatch, generationPatchSha256, parseGenerationPatch } from "./generation-patch.ts";
 import { sha256 } from "./project-files.ts";
 
 test("applies create update and delete operations",async()=>{
@@ -57,4 +57,23 @@ test("rejects unsafe or duplicate paths already present in the base tree",async(
  const patch={schemaVersion:"2" as const,summary:"x",operations:[{op:"create" as const,path:"src/new.ts",content:"new"}]};
  await assert.rejects(()=>applyGenerationPatch([{path:"../secret",content:"x"}],patch));
  await assert.rejects(()=>applyGenerationPatch([{path:"src/a.ts",content:"1"},{path:"src/a.ts",content:"2"}],patch),/Duplicate project path/);
+});
+
+test("canonical patch fingerprint is stable across operation and object key ordering",async()=>{
+ const h=await sha256("old");
+ const a={schemaVersion:"2" as const,summary:"fix",operations:[
+  {op:"update" as const,path:"src/b.ts",baseSha256:h,content:"b"},
+  {op:"create" as const,path:"src/a.ts",content:"a"},
+ ]};
+ const b={summary:"fix",operations:[
+  {content:"a",path:"src/a.ts",op:"create" as const},
+  {content:"b",baseSha256:h,path:"src/b.ts",op:"update" as const},
+ ],schemaVersion:"2" as const};
+ assert.equal(await generationPatchSha256(a),await generationPatchSha256(b));
+});
+
+test("canonical patch fingerprint changes when authorized content changes",async()=>{
+ const a={schemaVersion:"2" as const,summary:"fix",operations:[{op:"create" as const,path:"src/a.ts",content:"a"}]};
+ const b={schemaVersion:"2" as const,summary:"fix",operations:[{op:"create" as const,path:"src/a.ts",content:"b"}]};
+ assert.notEqual(await generationPatchSha256(a),await generationPatchSha256(b));
 });
