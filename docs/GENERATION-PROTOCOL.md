@@ -63,3 +63,16 @@ Build behavior is split deliberately:
 The autostart path also reuses the already persisted initial user message instead of appending it a second time.
 
 Remaining protocol migration work: promote initial creation from v1 to `GenerationResultV2`, then remove the v1 generation contract after migration compatibility is no longer needed.
+
+
+### Verified approval change sets
+
+Patch approval now derives a deterministic `ProjectChangeSet` from the validated base and candidate trees before showing the approval dialog. The change set contains only paths, operation type, byte counts and SHA-256 identities; generated file contents are not duplicated into approval metadata. The dialog displays the actual validated create/update/delete delta plus shortened base/next tree identities.
+
+This separates three concerns explicitly:
+
+1. the model proposes a patch;
+2. Laloba computes and displays the resulting verified tree delta;
+3. authorization re-checks the original base tree before commit.
+
+Remix and draft capture also read their source from `ProjectTree` rather than the legacy `project.html/files` projections.
