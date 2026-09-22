@@ -1,0 +1,5 @@
+import * as DialogPrimitive from "@radix-ui/react-dialog";import { X } from "lucide-react";import type { ReactNode } from "react";import { cn } from "@/lib/utils";
+export const Sheet=DialogPrimitive.Root;export const SheetTrigger=DialogPrimitive.Trigger;
+export function SheetContent({className,children,side="left",title="Panel"}:{className?:string;children:ReactNode;side?:"left"|"right";title?:string}) {
+ return <DialogPrimitive.Portal><DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-bg/70"/><DialogPrimitive.Content className={cn("fixed top-0 z-50 flex h-full w-[min(320px,90vw)] flex-col bg-surface text-fg shadow-[var(--shadow-border),var(--shadow-lift)]",side==="left"?"left-0":"right-0",className)}><DialogPrimitive.Title className="sr-only">{title}</DialogPrimitive.Title><DialogPrimitive.Close className="absolute top-3 right-3 rounded-full p-2 text-muted hover:bg-elevated"><X className="size-4"/></DialogPrimitive.Close>{children}</DialogPrimitive.Content></DialogPrimitive.Portal>;
+}
