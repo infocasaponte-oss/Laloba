@@ -1,29 +1,143 @@
 import { randomBytes } from "node:crypto";
+import { Pool } from "pg";
 import { betterAuth } from "better-auth";
+import { bearer, genericOAuth } from "better-auth/plugins";
+import { tanstackStartCookies } from "better-auth/tanstack-start";
+import { getCookie } from "@tanstack/react-start/server";
+import { ensureDbReady, getPglite } from "../db";
 import { env } from "../env.server";
 import { emailAndPasswordEnabled } from "./email-password";
+import { pgliteDialect } from "./pglite-dialect";
 import { GROK_PROVIDERS } from "./providers";
-import { PREVIEW_CLIENT_ID,PREVIEW_CLIENT_SECRET,previewOAuthConfigured } from "./preview";
+import {
+  GROK_ISSUER_DEFAULT,
+  PREVIEW_ALLOWED_HOSTS,
+  PREVIEW_CLIENT_ID,
+  PREVIEW_CLIENT_SECRET,
+} from "./preview";
 
-const secret=env("BETTER_AUTH_SECRET");
-const baseURL=env("BETTER_AUTH_URL");
-if(Boolean(secret)!==Boolean(baseURL))throw new Error("BETTER_AUTH_SECRET and BETTER_AUTH_URL must be configured together");
+void ensureDbReady();
 
-export const authConfigured=Boolean(secret&&baseURL);
+const LOOPBACK_HOSTS=new Set(["localhost","127.0.0.1","[::1]","::1"]);
 
-// Better Auth requires a server secret even when auth is intentionally disabled.
-// Use an unpredictable process-local value instead of a committed fallback.
-// It never represents a configured authentication boundary and changes on restart.
-const runtimeSecret=secret??randomBytes(32).toString("hex");
+function safeHttpsIssuer(value:string,nodeEnv=process.env.NODE_ENV){
+  let url:URL;
+  try{url=new URL(value)}catch{throw new Error("Invalid GROK_AUTH_ISSUER URL")}
+  if(url.username||url.password)throw new Error("GROK_AUTH_ISSUER must not contain credentials");
+  if(url.protocol==="https:")return url.toString().replace(/\/$/,"");
+  if(url.protocol==="http:"&&nodeEnv!=="production"&&LOOPBACK_HOSTS.has(url.hostname)){
+    return url.toString().replace(/\/$/,"");
+  }
+  throw new Error("GROK_AUTH_ISSUER must use HTTPS");
+}
 
-const socialProviders=previewOAuthConfigured()
- ?Object.fromEntries(GROK_PROVIDERS.map((provider)=>[provider.idp,{clientId:PREVIEW_CLIENT_ID!,clientSecret:PREVIEW_CLIENT_SECRET!}]))
- :{};
+function safeBaseUrl(value:string|undefined){
+ if(!value)return undefined;
+ let url:URL;
+ try{url=new URL(value)}catch{throw new Error("Invalid BETTER_AUTH_URL")}
+ if(url.username||url.password)throw new Error("BETTER_AUTH_URL must not contain credentials");
+ if(url.protocol!=="https:"&&!(process.env.NODE_ENV!=="production"&&url.protocol==="http:"&&LOOPBACK_HOSTS.has(url.hostname))){
+  throw new Error("BETTER_AUTH_URL must use HTTPS");
+ }
+ return url.origin;
+}
+
+const authDisabled=env("VITE_AUTH_ENABLED")==="false";
+const grokIssuer=safeHttpsIssuer(env("GROK_AUTH_ISSUER")??GROK_ISSUER_DEFAULT);
+const grokClientId=env("GROK_AUTH_CLIENT_ID")??PREVIEW_CLIENT_ID;
+const grokClientSecret=env("GROK_AUTH_CLIENT_SECRET")??PREVIEW_CLIENT_SECRET;
+
+export const authConfigured=!authDisabled&&Boolean(grokClientId&&grokClientSecret);
+
+const explicitBaseURL=safeBaseUrl(env("BETTER_AUTH_URL"));
+const previewAllowedHosts:string[]=[...PREVIEW_ALLOWED_HOSTS];
+const LOCAL_DEV_ORIGINS=[
+ "http://localhost:8080",
+ "http://127.0.0.1:8080",
+ "http://[::1]:8080",
+];
+
+const baseURL=explicitBaseURL??{
+ allowedHosts:[...previewAllowedHosts,"localhost","127.0.0.1","[::1]"],
+ protocol:"auto" as const,
+ fallback:"http://localhost:8080",
+};
+
+const trustedOrigins:string[]=explicitBaseURL
+ ?[explicitBaseURL,...LOCAL_DEV_ORIGINS]
+ :[
+   ...previewAllowedHosts,
+   ...previewAllowedHosts.flatMap((host)=>[`https://${host}`,`http://${host}`]),
+   ...LOCAL_DEV_ORIGINS,
+  ];
+
+const databaseUrl=env("DATABASE_URL");
+const database=databaseUrl
+ ?new Pool({connectionString:databaseUrl})
+ :{dialect:pgliteDialect(()=>getPglite()),type:"postgres" as const};
+
+const globalAuthRef=globalThis as typeof globalThis&{__lalobaPreviewAuthSecret__?:string};
+function runtimeAuthSecret(){
+ const configured=env("BETTER_AUTH_SECRET");
+ if(configured)return configured;
+ globalAuthRef.__lalobaPreviewAuthSecret__??=randomBytes(32).toString("hex");
+ return globalAuthRef.__lalobaPreviewAuthSecret__;
+}
+
+export const SESSION_TOKEN_COOKIE="__Host-laloba-auth.session_token";
+
+const issuerBase=grokIssuer.replace(/\/+$/,"");
+const authorizationUrl=`${issuerBase}/api/auth/oauth2/authorize`;
+const tokenUrl=`${issuerBase}/api/auth/oauth2/token`;
+const userInfoUrl=`${issuerBase}/api/auth/oauth2/userinfo`;
+
+const oauthPlugin=authConfigured
+ ?genericOAuth({
+   config:GROK_PROVIDERS.map(({providerId,idp})=>({
+    providerId,
+    clientId:grokClientId as string,
+    clientSecret:grokClientSecret as string,
+    authorizationUrl,
+    tokenUrl,
+    userInfoUrl,
+    scopes:["openid","profile","email"],
+    authorizationUrlParams:{idp,prompt:"login"},
+   })),
+  })
+ :null;
 
 export const auth=betterAuth({
- secret:runtimeSecret,
  baseURL,
- emailAndPassword:{enabled:emailAndPasswordEnabled},
- socialProviders,
- advanced:{useSecureCookies:process.env.NODE_ENV==="production"},
+ secret:runtimeAuthSecret(),
+ database,
+ trustedOrigins,
+ account:{
+  encryptOAuthTokens:true,
+  accountLinking:{
+   enabled:true,
+   trustedProviders:GROK_PROVIDERS.map((provider)=>provider.providerId),
+   requireLocalEmailVerified:false,
+  },
+ },
+ session:{cookieCache:{enabled:true,maxAge:300}},
+ ...(emailAndPasswordEnabled?{emailAndPassword:{enabled:true}}:{}),
+ advanced:{
+  useSecureCookies:false,
+  defaultCookieAttributes:{secure:true,sameSite:"lax",path:"/"},
+  cookies:{
+   session_token:{name:SESSION_TOKEN_COOKIE},
+   session_data:{name:"__Host-laloba-auth.session_data"},
+   account_data:{name:"__Host-laloba-auth.account_data"},
+   dont_remember:{name:"__Host-laloba-auth.dont_remember"},
+  },
+ },
+ plugins:[
+  ...(oauthPlugin?[oauthPlugin]:[]),
+  bearer(),
+  tanstackStartCookies(),
+ ],
 });
+
+export function readSessionToken():string|null{
+ return getCookie(SESSION_TOKEN_COOKIE)??null;
+}
