@@ -20,6 +20,7 @@ import { parseGenerationResult } from "@/lib/generation-result";
 import type { GenerationResult } from "@/lib/generation-result";
 import { createGenerationId } from "@/lib/generation-id";
 import { loadProjectHistory, recordProjectGeneration, restoreProjectGeneration } from "@/lib/project-history-store";
+import { entrypointHtml } from "@/lib/project-tree";
 import { streamChat } from "@/lib/stream-chat";
 import { useHasHydrated, useLaloba } from "@/lib/store";
 import type { Mode } from "@/lib/types";
@@ -49,6 +50,8 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   const [historyOpen,setHistoryOpen]=useState(false), [shareOpen,setShareOpen]=useState(false), [publishOpen,setPublishOpen]=useState(false);
   const [commentsOpen,setCommentsOpen]=useState(false), [selectMode,setSelectMode]=useState(false), [streaming,setStreaming]=useState<string|null>(null);
   const [pendingGeneration,setPendingGeneration]=useState<PendingGenerationAuthorization|null>(null);
+  const currentHtml=entrypointHtml(project.tree);
+  if(!currentHtml)throw new Error("Project tree is missing a valid index.html");
   const busy=streaming!==null, started=useRef(false);
   const generationHistory = historyOpen ? loadProjectHistory(projectId) : null;
 
@@ -57,7 +60,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
     const userMsg={id:uid("m"),role:"user" as const,content:prompt,mode,createdAt:Date.now()};
     appendMessage(projectId,userMsg); setStreaming(""); const t0=Date.now();
     try {
-      const text=await streamChat({mode,messages:[...project.messages,userMsg].map((m)=>({role:m.role,content:m.content})),currentHtml:mode==="build"?project.html:undefined,knowledge:project.knowledge||knowledge,onDelta:(c)=>setStreaming((s)=>(s??"")+c)});
+      const text=await streamChat({mode,messages:[...project.messages,userMsg].map((m)=>({role:m.role,content:m.content})),currentHtml:mode==="build"?currentHtml:undefined,knowledge:project.knowledge||knowledge,onDelta:(c)=>setStreaming((s)=>(s??"")+c)});
       const structured = mode === "build" ? parseGenerationResult(text) : null;
       const html = structured?.ok ? structured.result.files[0].content : null;
       const visible = structured?.ok
@@ -66,8 +69,8 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
           ? `No apliqué el resultado: ${structured.reason}`
           : stripHtmlBlock(text) || text;
       if(html&&mode==="build"&&structured?.ok) {
-        if(project.html.trim()){
-          setPendingGeneration(await prepareGenerationAuthorization(createGenerationId(),projectId,prompt,structured.result,project.html));
+        if(currentHtml.trim()){
+          setPendingGeneration(await prepareGenerationAuthorization(createGenerationId(),projectId,prompt,structured.result,currentHtml));
         }else{
           await applyAuthorizedGeneration(structured.result,prompt);
         }
@@ -78,8 +81,8 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
     finally { setStreaming(null); }
   }
   async function applyAuthorizedGeneration(result:GenerationResult,prompt:string) {
-    const pending=await prepareGenerationAuthorization(createGenerationId(),projectId,prompt,result,project.html);
-    const {manifest,snapshot}=await authorizeGeneration(pending,projectId,project.html);
+    const pending=await prepareGenerationAuthorization(createGenerationId(),projectId,prompt,result,currentHtml);
+    const {manifest,snapshot}=await authorizeGeneration(pending,projectId,currentHtml);
     recordProjectGeneration(projectId,{id:pending.generationId,summary:result.summary,snapshot});
     console.info("laloba:generation",{generationId:pending.generationId,manifest,snapshot,authorized:true});
     setProjectFiles(projectId,pending.generationId,snapshot.files.map(({path,content})=>({path,content})),prompt.slice(0,40));
@@ -88,7 +91,9 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
   async function applyPendingGeneration(pending:PendingGenerationAuthorization) {
     const current=useLaloba.getState().projects.find((candidate)=>candidate.id===projectId);
     if(!current)throw new Error("Project no longer exists");
-    const {manifest,snapshot}=await authorizeGeneration(pending,projectId,current.html);
+    const latestHtml=entrypointHtml(current.tree);
+    if(!latestHtml)throw new Error("Project tree is missing a valid index.html");
+    const {manifest,snapshot}=await authorizeGeneration(pending,projectId,latestHtml);
     recordProjectGeneration(projectId,{id:pending.generationId,summary:pending.result.summary,snapshot});
     console.info("laloba:generation",{generationId:pending.generationId,manifest,snapshot,authorized:true});
     setProjectFiles(projectId,pending.generationId,snapshot.files.map(({path,content})=>({path,content})),pending.prompt.slice(0,40));
@@ -107,7 +112,7 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
       <div className="mx-auto hidden items-center rounded-full bg-elevated p-1 md:flex">{tabs.map((t)=><button key={t.id} type="button" onClick={()=>setTab(t.id)} className={cn("rounded-full px-3 py-1 text-xs text-muted",tab===t.id&&"bg-surface text-fg shadow-[var(--shadow-border)]")}>{t.label}</button>)}</div>
       <div className="ml-auto flex items-center gap-1">{tab==="preview"&&<Button size="sm" variant={selectMode?"default":"ghost"} onClick={()=>setSelectMode((v)=>!v)}>Editar</Button>}<Button size="icon-sm" variant="ghost" aria-label="Comentarios" onClick={()=>setCommentsOpen(true)}><MessageSquare className="size-4"/></Button><Button size="sm" variant="ghost" onClick={()=>setShareOpen(true)}><Share2 className="size-4"/> Compartir</Button><Button size="sm" onClick={()=>setPublishOpen(true)}>Publicar</Button></div>
     </header>
-    <div className="min-h-0 flex-1">{chatOpen?<Group orientation="horizontal"><Panel defaultSize="32%" minSize="260px"><ChatPanel project={project} streaming={streaming} busy={busy} onSend={run}/></Panel><Separator className="w-px bg-border"/><Panel>{tab==="preview"?<PreviewPane html={project.html} selectMode={selectMode}/>:tab==="files"?<FilesPane project={project}/>:tab==="code"?<CodePane project={project}/>:<MorePanel project={project}/>}</Panel></Group>:tab==="preview"?<PreviewPane html={project.html} selectMode={selectMode}/>:tab==="files"?<FilesPane project={project}/>:tab==="code"?<CodePane project={project}/>:<MorePanel project={project}/>}</div>
+    <div className="min-h-0 flex-1">{chatOpen?<Group orientation="horizontal"><Panel defaultSize="32%" minSize="260px"><ChatPanel project={project} streaming={streaming} busy={busy} onSend={run}/></Panel><Separator className="w-px bg-border"/><Panel>{tab==="preview"?<PreviewPane html={currentHtml} selectMode={selectMode}/>:tab==="files"?<FilesPane project={project}/>:tab==="code"?<CodePane project={project}/>:<MorePanel project={project}/>}</Panel></Group>:tab==="preview"?<PreviewPane html={currentHtml} selectMode={selectMode}/>:tab==="files"?<FilesPane project={project}/>:tab==="code"?<CodePane project={project}/>:<MorePanel project={project}/>}</div>
   </div>
   <Sheet open={sideOpen} onOpenChange={setSideOpen}><SheetContent side="left"><div className="space-y-3 p-4"><LogoMark className="size-7"/><Link to="/">Panel</Link><Link to="/templates">Plantillas</Link><Link to="/connectors">Conectores</Link><Link to="/settings">Ajustes</Link></div></SheetContent></Sheet>
   <Dialog open={historyOpen} onOpenChange={setHistoryOpen}><DialogContent><h2 className="font-display text-lg font-semibold">Historial</h2><div className="mt-3 space-y-2">{generationHistory?.generations.slice().reverse().map((g)=><button key={g.id} type="button" className="block w-full rounded-lg border border-border p-3 text-left" onClick={async()=>{try{const history=await restoreProjectGeneration(projectId,g.id);const current=history.generations.find((x)=>x.id===history.currentGenerationId);const html=current?.snapshot.files.find((file)=>file.path==="index.html")?.content;if(!html)throw new Error("Snapshot sin index.html");setProjectFiles(projectId,g.id,current!.snapshot.files.map(({path,content})=>({path,content})),`Restaurar ${g.summary.slice(0,30)}`);setHistoryOpen(false);toast.success("Generación restaurada y verificada")}catch{toast.error("No se pudo verificar esta generación")}}}><div className="text-sm font-medium">{g.summary}</div><div className="text-xs text-muted">{g.id}</div></button>)}{!generationHistory?.generations.length && <p className="text-sm text-muted">Todavía no hay generaciones verificadas. Las versiones antiguas se conservan en los datos del proyecto, pero ya no se restauran sin verificación de integridad.</p>}</div></DialogContent></Dialog>
