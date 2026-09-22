@@ -58,3 +58,18 @@ The default branch should require:
 ## Repository normalization
 
 The Base64 transfer payload under `.laloba-transfer/` is temporary. Restore and review the source before treating the repository as production-ready. Once the source tree has been committed normally, remove the transfer payload in a dedicated cleanup change.
+
+
+## Required application gates
+
+Once the canonical lockfile is present, CI must run these gates from a clean checkout:
+
+1. `npm ci`
+2. `npm run typecheck`
+3. `npm run test:generator`
+4. `npm test`
+5. `npm run build:dev`
+
+The focused generator suite is intentionally separate: failures in generation contracts, path confinement, preview isolation, rate limiting, snapshot integrity, or generated HTML validation block changes even when unrelated application tests pass.
+
+GitHub-hosted runner availability is infrastructure, not an application assertion. A workflow that never receives a runner must not be reported as a passing or failing Laloba test run.
