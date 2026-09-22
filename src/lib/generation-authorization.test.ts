@@ -14,6 +14,7 @@ test("authorizes a generation only against the state it was prepared from",async
   assert.equal(authorized.snapshot.generationId,"generation_123456");
   assert.equal(authorized.snapshot.files[0].content,result.files[0].content);
   assert.equal(authorized.snapshot.treeSha256,authorized.manifest.treeSha256);
+  assert.equal(authorized.snapshot.createdAt,authorized.manifest.generatedAt);
 });
 
 test("rejects authorization after the project changes",async()=>{
