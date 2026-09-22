@@ -687,3 +687,26 @@ Laloba can be called a production app-generation platform when all of the follow
 12. Security findings and deployment events are auditable.
 
 Only after this gate should enterprise/governance expansion be treated as product scaling rather than foundational remediation.
+
+
+## Progress update — 2026-09-22
+
+Implemented since this plan was written:
+
+- recovered the canonical `store.ts`, `types.ts`, `html-apps.ts`, `stream-chat.ts`, `utils.ts` and `catalog.ts` from the user-provided workspace archive with recorded SHA-256 provenance;
+- restored the editor components needed by the active project route;
+- promoted `ProjectTree v2` into the canonical Zustand project state;
+- added persisted-state migration from legacy HTML/files to validated ProjectTree;
+- blocked generic `updateProject` from mutating source fields;
+- changed generation, preview, Files and Code surfaces to read from ProjectTree;
+- made manual code saves create snapshot + manifest + verified generation history;
+- connected v2 patch generation and conflict-safe approval to the live editor;
+- centralized and tested the HTTP generation request boundary;
+- fixed duplicate initial prompt insertion during autostart.
+
+Still blocking Phase A completion:
+
+- authoritative `package-lock.json` is recovered and hash-verified locally but not yet committed byte-for-byte;
+- additional canonical application entrypoint/auth/server files from the recovered workspace still need restoration;
+- a clean `npm ci -> typecheck -> tests -> build` proof is still required;
+- GitHub Actions continues to fail before runner steps start, independently of application code.
