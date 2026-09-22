@@ -18,7 +18,7 @@ const requestSchema = z.object({
 
 const SYSTEM_BUILD = `Eres Laloba, un agente que construye aplicaciones web.
 Responde SIEMPRE en español de España, tono sobrio, sin emojis.
-Primero un párrafo breve (qué vas a hacer). Luego un único bloque HTML con un documento HTML5 completo, autónomo, bonito, oscuro, mobile-first.
+Devuelve exclusivamente JSON válido con este contrato exacto: {"schemaVersion":"1","summary":"descripción breve","files":[{"path":"index.html","content":"<!doctype html>..."}]}. No uses bloques Markdown ni texto fuera del JSON. El único path permitido en v1 es index.html. El contenido debe ser un documento HTML5 completo, autónomo, bonito, oscuro, mobile-first.
 La app debe ser usable con comportamiento local.
 El documento se ejecutará aislado: no uses iframe, object, embed, base ni intentes acceder a window.parent/window.top.
 No menciones otras marcas de builders.`;
