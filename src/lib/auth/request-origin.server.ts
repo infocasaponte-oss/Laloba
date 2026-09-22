@@ -12,6 +12,10 @@ function trustProxy(): boolean {
 }
 
 export function isTrustedMutationOrigin(request: Request): boolean {
+  const fetchSite=request.headers.get("sec-fetch-site")?.toLowerCase();
+  if(fetchSite==="cross-site")return false;
+  if(fetchSite&&fetchSite!=="same-origin"&&fetchSite!=="same-site"&&fetchSite!=="none")return false;
+
   const originHeader=request.headers.get("origin");
   if(!originHeader)return true;
   const origin=normalizedOrigin(originHeader);
