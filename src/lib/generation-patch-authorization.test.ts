@@ -17,6 +17,8 @@ test("authorizes a patch against the exact project tree",async()=>{
  const applied=await authorizePatch(pending,"p1",base);
  assert.equal(applied.files.find(f=>f.path==="src/app.ts")?.content,"new");
  assert.equal(applied.snapshot.files.length,3);
+ assert.equal(applied.snapshot.treeSha256,applied.manifest.treeSha256);
+ assert.equal(applied.snapshot.createdAt,applied.manifest.generatedAt);
 });
 
 test("rejects approval if any file in the base tree changed",async()=>{
