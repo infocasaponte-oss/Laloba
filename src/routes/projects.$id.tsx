@@ -15,7 +15,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { extractHtml, stripHtmlBlock } from "@/lib/html-apps";
-import { validateGeneratedHtml } from "@/lib/generated-html";
+import { parseGenerationResult } from "@/lib/generation-result";
 import { streamChat } from "@/lib/stream-chat";
 import { useHasHydrated, useLaloba } from "@/lib/store";
 import type { Mode } from "@/lib/types";
@@ -52,8 +52,14 @@ function Editor({ projectId, autostart }: { projectId: string; autostart: boolea
     appendMessage(projectId,userMsg); setStreaming(""); const t0=Date.now();
     try {
       const text=await streamChat({mode,messages:[...project.messages,userMsg].map((m)=>({role:m.role,content:m.content})),currentHtml:mode==="build"?project.html:undefined,knowledge:project.knowledge||knowledge,onDelta:(c)=>setStreaming((s)=>(s??"")+c)});
-      const extractedHtml=extractHtml(text); const validation=extractedHtml?validateGeneratedHtml(extractedHtml):null; const html=validation?.ok?validation.html:null;
-      const visible=validation&&!validation.ok?`No apliqué el resultado: ${validation.reason}`:stripHtmlBlock(text)||(html?"Listo. Revisé la vista previa.":text);
+      const structured = mode === "build" ? parseGenerationResult(text) : null;
+      const legacyHtml = mode === "build" && structured && !structured.ok ? extractHtml(text) : null;
+      const html = structured?.ok ? structured.result.files[0].content : legacyHtml;
+      const visible = structured?.ok
+        ? structured.result.summary
+        : structured && !structured.ok && !legacyHtml
+          ? `No apliqué el resultado: ${structured.reason}`
+          : stripHtmlBlock(text) || (html ? "Listo. Revisé la vista previa." : text);
       if(html&&mode==="build") setHtml(projectId,html,prompt.slice(0,40));
       const credits=mode==="plan"?0.4:1.1; spendCredits(credits);
       appendMessage(projectId,{id:uid("m"),role:"assistant",content:visible,mode,createdAt:Date.now(),credits,durationMs:Date.now()-t0,filesChanged:html?["index.html"]:[]});
