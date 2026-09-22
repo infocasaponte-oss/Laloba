@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 
 const required=[
+ "src/lib/catalog.ts",
  "src/lib/store.ts",
  "src/lib/types.ts",
  "src/lib/html-apps.ts",
