@@ -20,3 +20,10 @@ test("manifest is deterministic regardless of source file ordering",async()=>{
  assert.equal(ma.treeSha256,mb.treeSha256);
  assert.deepEqual(ma.files,mb.files);
 });
+
+test("rejects invalid generation identities and non-executable artifacts",async()=>{
+ const valid={schemaVersion:"1" as const,summary:"x",files:[{path:"index.html" as const,content:"<!doctype html><html><body>x</body></html>"}]};
+ await assert.rejects(()=>createGenerationManifest("bad",valid),/Invalid generation id/);
+ const invalid={schemaVersion:"2" as const,summary:"x",files:[{path:"src/app.ts",content:"export default 1"}]};
+ await assert.rejects(()=>createGenerationManifest("generation_9999",invalid),/Invalid generation artifact/);
+});
