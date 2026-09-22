@@ -14,3 +14,18 @@ The repository is being migrated from a historical transfer snapshot to normal G
 ## Completion gate
 
 Normalization is complete when a clean checkout can run `npm ci`, `npm run typecheck`, `npm test`, and `npm run build:dev` without relying on the historical transfer directory.
+
+
+## Canonical runtime blocker discovered during Milestone A
+
+The editor currently imports application modules such as `@/lib/store`, `@/lib/types`, `@/lib/html-apps`, `@/lib/stream-chat`, and `@/lib/utils`, but those canonical files are not present in the normalized Git branch. The historical transfer fragments do not provide a cryptographically authenticated ordering manifest, so reconstructing and committing guessed runtime source would create an unverifiable codebase.
+
+Therefore the migration rule is strict:
+
+1. Do not invent replacements for missing canonical runtime modules merely to satisfy imports.
+2. Do not treat historical Base64 fragments as authoritative without an ordered manifest and checksum.
+3. Generator/security modules may be developed independently only when their dependencies are present and testable.
+4. Integration into the editor/store is blocked until the canonical runtime source is imported as ordinary files.
+5. Once imported, the first integration change must preserve the legacy `project.html` field as a compatibility projection of `ProjectTree v2`, not as the source of truth.
+
+This blocker is intentional: provenance is part of the security boundary for a system that generates and executes code.
