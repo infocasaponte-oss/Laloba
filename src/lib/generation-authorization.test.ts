@@ -38,3 +38,8 @@ test("rejects expired and future-dated generation authorizations",async()=>{
  await assert.rejects(()=>authorizeGeneration(pending,"project-a","<html>old</html>",new Date("2026-01-01T00:11:00.000Z")),/expired/);
  await assert.rejects(()=>authorizeGeneration(pending,"project-a","<html>old</html>",new Date("2025-12-31T23:59:59.000Z")),/expired/);
 });
+
+
+test("rejects malformed generation ids before preparing approval",async()=>{
+ await assert.rejects(()=>prepareGenerationAuthorization("bad","project-a","fix it",result,"<html>old</html>"),/Invalid generation id/);
+});
