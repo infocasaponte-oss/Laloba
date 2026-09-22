@@ -8,6 +8,12 @@ This document is the single source of truth for Laloba development priorities. R
 
 There is no product release label such as "V1" in this plan. Readiness is defined by objective capability gates, not by a marketing version name.
 
+## Current execution status
+
+- **F0 — Canonical repository and identity:** implemented on the normalization change set. Runtime source is complete, the canonical lockfile is tracked and historical transfer/recovery payloads have been removed.
+- **F1 — Reproducible CI and repository protection:** in progress. CI now validates the normalized repository directly; the remaining gate is evidence from a GitHub runner executing the complete clean-checkout pipeline successfully.
+- **F2 and later:** blocked until the F1 gate is proven green.
+
 ## 1. Non-negotiable rules
 
 1. Phases are dependency ordered. A dependent phase cannot be declared complete while its prerequisite gate is red.
