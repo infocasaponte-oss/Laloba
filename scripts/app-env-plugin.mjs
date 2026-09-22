@@ -1,0 +1,1 @@
+export function appEnvPlugin(){return {name:"app-builder:app-env",apply:"serve",configureServer(server){server.middlewares.use("/__app-env",(_req,res)=>{res.setHeader("content-type","application/json");res.end(JSON.stringify({authConfigured:Boolean(process.env.BETTER_AUTH_SECRET)}))})}}}
