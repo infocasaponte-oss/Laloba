@@ -43,3 +43,8 @@ test("rejects expired and future-dated generation authorizations",async()=>{
 test("rejects malformed generation ids before preparing approval",async()=>{
  await assert.rejects(()=>prepareGenerationAuthorization("bad","project-a","fix it",result,"<html>old</html>"),/Invalid generation id/);
 });
+
+
+test("rejects invalid project ids before preparing approval",async()=>{
+ await assert.rejects(()=>prepareGenerationAuthorization("generation_123461","../project","fix it",result,"<html>old</html>"),/Invalid project id/);
+});
