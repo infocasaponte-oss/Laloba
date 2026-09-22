@@ -1,5 +1,5 @@
 import { applyGenerationPatch, type GenerationPatch, type ProjectSourceFile } from "./generation-patch";
-import { createProjectSnapshot, sha256 } from "./project-files";
+import { createProjectSnapshot, projectTreeSha256, sha256 } from "./project-files";
 
 export const PATCH_AUTHORIZATION_TTL_MS=10*60*1000;
 
@@ -14,13 +14,6 @@ export type PendingPatchAuthorization={
   preparedAt:string;
 };
 
-async function treeSha256(files:ProjectSourceFile[]){
-  const canonical=[...files].sort((a,b)=>a.path.localeCompare(b.path));
-  const rows:string[]=[];
-  for(const file of canonical)rows.push(`${file.path}\0${await sha256(file.content)}`);
-  return sha256(rows.join("\n"));
-}
-
 async function patchSha256(patch:GenerationPatch){
  return sha256(JSON.stringify(patch));
 }
@@ -29,7 +22,7 @@ export async function preparePatchAuthorization(
  generationId:string,projectId:string,prompt:string,patch:GenerationPatch,currentFiles:ProjectSourceFile[],now=new Date()
 ):Promise<PendingPatchAuthorization>{
  await applyGenerationPatch(currentFiles,patch);
- return{schemaVersion:"2",generationId,projectId,prompt,patch,patchSha256:await patchSha256(patch),baseTreeSha256:await treeSha256(currentFiles),preparedAt:now.toISOString()};
+ return{schemaVersion:"2",generationId,projectId,prompt,patch,patchSha256:await patchSha256(patch),baseTreeSha256:await projectTreeSha256(currentFiles),preparedAt:now.toISOString()};
 }
 
 export async function authorizePatch(
@@ -39,7 +32,7 @@ export async function authorizePatch(
  const preparedAt=Date.parse(pending.preparedAt);
  if(!Number.isFinite(preparedAt)||now.getTime()-preparedAt>PATCH_AUTHORIZATION_TTL_MS||now.getTime()<preparedAt)throw new Error("Authorization expired; regenerate before applying");
  if(await patchSha256(pending.patch)!==pending.patchSha256)throw new Error("Authorization payload changed after preparation");
- if(await treeSha256(currentFiles)!==pending.baseTreeSha256)throw new Error("Project tree changed after generation; regenerate before applying");
+ if(await projectTreeSha256(currentFiles)!==pending.baseTreeSha256)throw new Error("Project tree changed after generation; regenerate before applying");
  const files=await applyGenerationPatch(currentFiles,pending.patch);
  const snapshot=await createProjectSnapshot(pending.generationId,files);
  return{files,snapshot};
