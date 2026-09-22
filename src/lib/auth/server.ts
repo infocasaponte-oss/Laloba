@@ -7,6 +7,7 @@ import { getCookie } from "@tanstack/react-start/server";
 import { ensureDbReady, getPglite } from "../db";
 import { env } from "../env.server";
 import { emailAndPasswordEnabled } from "./email-password";
+import { resolveAuthBrokerIssuer,resolveBetterAuthOrigin } from "./auth-config.server";
 import { pgliteDialect } from "./pglite-dialect";
 import { GROK_PROVIDERS } from "./providers";
 import {
@@ -18,38 +19,14 @@ import {
 
 void ensureDbReady();
 
-const LOOPBACK_HOSTS=new Set(["localhost","127.0.0.1","[::1]","::1"]);
-
-function safeHttpsIssuer(value:string,nodeEnv=process.env.NODE_ENV){
-  let url:URL;
-  try{url=new URL(value)}catch{throw new Error("Invalid GROK_AUTH_ISSUER URL")}
-  if(url.username||url.password)throw new Error("GROK_AUTH_ISSUER must not contain credentials");
-  if(url.protocol==="https:")return url.toString().replace(/\/$/,"");
-  if(url.protocol==="http:"&&nodeEnv!=="production"&&LOOPBACK_HOSTS.has(url.hostname)){
-    return url.toString().replace(/\/$/,"");
-  }
-  throw new Error("GROK_AUTH_ISSUER must use HTTPS");
-}
-
-function safeBaseUrl(value:string|undefined){
- if(!value)return undefined;
- let url:URL;
- try{url=new URL(value)}catch{throw new Error("Invalid BETTER_AUTH_URL")}
- if(url.username||url.password)throw new Error("BETTER_AUTH_URL must not contain credentials");
- if(url.protocol!=="https:"&&!(process.env.NODE_ENV!=="production"&&url.protocol==="http:"&&LOOPBACK_HOSTS.has(url.hostname))){
-  throw new Error("BETTER_AUTH_URL must use HTTPS");
- }
- return url.origin;
-}
-
 const authDisabled=env("VITE_AUTH_ENABLED")==="false";
-const grokIssuer=safeHttpsIssuer(env("GROK_AUTH_ISSUER")??GROK_ISSUER_DEFAULT);
+const grokIssuer=resolveAuthBrokerIssuer(env("GROK_AUTH_ISSUER")??GROK_ISSUER_DEFAULT);
 const grokClientId=env("GROK_AUTH_CLIENT_ID")??PREVIEW_CLIENT_ID;
 const grokClientSecret=env("GROK_AUTH_CLIENT_SECRET")??PREVIEW_CLIENT_SECRET;
 
 export const authConfigured=!authDisabled&&Boolean(grokClientId&&grokClientSecret);
 
-const explicitBaseURL=safeBaseUrl(env("BETTER_AUTH_URL"));
+const explicitBaseURL=resolveBetterAuthOrigin(env("BETTER_AUTH_URL"));
 const previewAllowedHosts:string[]=[...PREVIEW_ALLOWED_HOSTS];
 const LOCAL_DEV_ORIGINS=[
  "http://localhost:8080",
